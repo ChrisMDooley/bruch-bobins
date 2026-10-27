@@ -48,6 +48,9 @@ def fill_wrong(pg):
     pg.evaluate("""() => { const s = window.__bbTest(); const st = s.task.answer.type === 'steps' ? s.task.answer.steps[s.step].answer : s.task.answer;
       const k = BB.widgets.keyOf(st), w = JSON.parse(JSON.stringify(k));
       if (st.type === 'choice') { if (k.ids) w.ids = k.ids.slice(1); else w.id = st.options.find(o => o.id !== k.id).id; }
+      else if (st.type === 'order') w.order = k.order.slice().reverse();
+      else if (st.type === 'table') { const c = w.cells[0]; if (c.x != null) c.x += 1; else if (st.slots[0].fixed && st.slots[0].fixed.n != null) c.d += 1; else c.n += 1; }
+      else if (st.type === 'frac' && st.fixed && st.fixed.n != null) w.d = w.d + 1;
       else if ('n' in w && w.n != null) w.n = w.n + 1; else if ('w' in w && w.w != null) w.w = w.w + 1;
       else if ('x' in w) w.x = w.x + 1; else if ('ct' in w) w.ct = w.ct + 10; else if ('a' in w) w.a = w.a + 1;
       else if ('count' in w) w.count = w.count + 1; else if ('ml' in w) w.ml = w.ml + 50;
@@ -72,14 +75,18 @@ with sync_playwright() as p:
     ctx.add_init_script(MOCK_SPEECH); ctx.add_init_script(UNLOCK)
     pg = ctx.new_page()
     pg.on('pageerror', lambda e: errors.append('pageerror: ' + str(e)))
-    pg.on('response', lambda r: r.status >= 400 and not (not platform and '/robins-bobins/' in r.url) and errors.append('HTTP %d %s' % (r.status, r.url)))
+    # sibling apps' card scripts (europa-trainer, musik-bobins …) may not be checked out next to robins-bobins
+    sibling = lambda u: re.search(r'/(europa-trainer|english-bobins|musik-bobins)/rb-card\.js', u) and not os.path.isdir(os.path.join(ROOT, re.search(r'/([a-z-]+)/rb-card', u).group(1)))
+    pg.on('response', lambda r: r.status >= 400 and not (not platform and '/robins-bobins/' in r.url) and not sibling(r.url) and errors.append('HTTP %d %s' % (r.status, r.url)))
 
     # ---------------- home
     pg.goto(URL + '?child=lukas'); pg.wait_for_timeout(500)
     home = pg.inner_text('main')
     check('home greets Lukas', 'Hallo Lukas!' in home, home[:200])
     check('countdown to the 19th (Schulbeginn)', re.search(r'Noch \d+ Tage? bis zum Schulbeginn|Morgen ist|Heute ist', home) or '2026-10-19' < '2026-10-03', home[:300])
-    check('8 learning modules A–H', pg.locator('.tile.module').count() == 8)
+    check('14 learning modules A–N', pg.locator('.tile.module').count() == 14)
+    check('Kapitel 2 shown first and marked "aktuell"', pg.locator('.unit').first.get_attribute('data-unit') == 'k2' and 'aktuell' in pg.inner_text('.unit.focus'))
+    check('menu entry labor', pg.locator('[data-menu=labor]').count() == 1)
     for m in ['heute', 'ueben', 'schnell', 'sach', 'bild', 'pruefung', 'fehler', 'streifen', 'werkstatt']:
         check('menu entry ' + m, pg.locator('[data-menu=%s]' % m).count() >= 1)
     pg.screenshot(path=OUT + '/b01-home.png', full_page=True)
@@ -141,7 +148,8 @@ with sync_playwright() as p:
         else:
             check('task %d solvable (%s)' % (n, c['gen']), solve(pg) == 'ok', c)
         nxt(pg)
-    check('Heute üben: 10 tasks', n == 10, kinds)
+    cb = pg.evaluate("BB.app.progress.doc.log.slice(-%d).length" % n)
+    check('Heute üben: 10 tasks (+ up to 2 similar ones after mistakes)', 10 <= n <= 12, kinds)
     check('Heute üben: end screen', pg.locator('.end').count() == 1 and 'Geschafft für heute' in pg.inner_text('.end'))
     if platform:
         check('coins shown on the end screen', 'Robin-Münzen' in pg.inner_text('.end'), pg.inner_text('.end'))
@@ -234,6 +242,8 @@ with sync_playwright() as p:
         check('exam: no feedback during the test', pg.locator('.fb-box').count() == 0)
     ee = pg.inner_text('.exam-end')
     check('exam: 12 tasks, result list, 10 right', cnt == 12 and '10 von 12' in ee, ee[:200])
+    exam_gens = pg.evaluate("BB.app.progress.doc.log.slice(-12).map(l => l.skill)")
+    check('exam (focus Kapitel 2) asks Kapitel-2 topics', all(pg.evaluate("s => BB.model.unitOf(s) === 'k2'", x) for x in exam_gens), exam_gens)
     pg.screenshot(path=OUT + '/b14-exam.png', full_page=True)
     pg.click('text=Fehler verbessern'); pg.wait_for_timeout(250)
     fixed = 0
@@ -260,7 +270,7 @@ with sync_playwright() as p:
 
     # ---------------- Üben by topic, Bild, Sach
     pg.goto(URL + '?child=lukas#/ueben'); pg.wait_for_timeout(200)
-    check('Üben: every skill listed with its state', pg.locator('.list-item.skill').count() == 16)
+    check('Üben: every skill listed with its state', pg.locator('.list-item.skill').count() == 27)
     pg.click('[data-skill=g2u]'); pg.wait_for_timeout(200)
     check('skill round: g2u tasks', cur(pg)['skill'] == 'g2u')
     for mode, tag in [('bild', 'visual'), ('sach', 'world')]:
@@ -279,7 +289,8 @@ with sync_playwright() as p:
     else:
         txt = pg.inner_text('main')
         check('parent: overview numbers', 'Übungszeit' in txt and 'gleich richtig' in txt and 'selbst verbessert' in txt and 'Tage in Folge' in txt, txt[:300])
-        check('parent: mastery per topic', pg.locator('.mrow').count() == 16 and ('braucht Übung' in txt or 'weitgehend' in txt or 'noch wenig' in txt))
+        check('parent: mastery per topic', pg.locator('.mrow').count() == 27 and ('braucht Übung' in txt or 'weitgehend' in txt or 'noch wenig' in txt))
+        check('parent: Kapitel-2 topics and focus setting', 'Brüche vergleichen' in txt and 'Erweitern & Kürzen' in txt and 'Schwerpunkt' in txt and pg.locator('select[aria-label=Schwerpunkt]').count() == 1, txt[:500])
         check('parent: countdown setting (date + label)', pg.locator('input[type=date]').input_value() == '2026-10-19')
         pg.screenshot(path=OUT + '/b15-parent.png', full_page=True)
 
@@ -332,20 +343,151 @@ with sync_playwright() as p:
             check('guest: parent page opens with the guest PIN', 'Nuka' in gp.inner_text('main'))
         cg.close()
 
+    # ================ Kapitel 2 ================
+    def run_task(page, gen, level, params=None, want=None):
+        page.evaluate("""([g, l, p, w]) => { const s = BB.session.create(BB.app.progress, {mode:'lernen', tasks:[{gen:g, level:l, params:p, want:w}]}); BB.practice.run(BB.app, s, {title:'T'}); }""", [gen, level, params, want])
+        page.wait_for_timeout(200)
+
+    # ---- lesson M: worked example one step at a time, then everything to the end
+    pg.goto(URL + '?child=lukas#/lernen/M'); pg.wait_for_timeout(300)
+    for i in range(3): pg.click('.lesson .btn.primary'); pg.wait_for_timeout(120)
+    check('lesson M: worked example starts with step 1 only', pg.locator('.walk-lines li').count() == 1 and 'Nenner' in pg.inner_text('.walk-lines') and 'Nächster Schritt' in pg.inner_text('.lesson-nav'), pg.inner_text('.lesson')[:300])
+    pg.screenshot(path=OUT + '/c01-walk-1.png', full_page=True)
+    for i in range(5): pg.click('.lesson .btn.primary'); pg.wait_for_timeout(120)
+    w = pg.inner_text('.walk-lines')
+    check('lesson M: all 6 steps, ends with 3/4 < 5/6, picture follows', pg.locator('.walk-lines li').count() == 6 and '9' in w and '10' in w and pg.locator('.walk-pic .pic-bars').count() == 1, w)
+    pg.screenshot(path=OUT + '/c02-walk-6.png', full_page=True)
+    for lesson in ['M', 'I', 'J', 'K', 'L', 'N']:
+        if lesson != 'M': pg.goto(URL + '?child=lukas#/lernen/' + lesson); pg.wait_for_timeout(250)
+        for i in range(60):
+            if pg.locator('.lesson .end-hero').count(): break
+            if pg.locator('.lesson .btn.primary').count() and not cur(pg):
+                pg.click('.lesson .btn.primary'); pg.wait_for_timeout(90); continue
+            if cur(pg): solve(pg); nxt(pg); continue
+        check('lesson %s finished' % lesson, pg.locator('.lesson .end-hero').count() == 1 and pg.evaluate("m => BB.app.progress.moduleDone(m)", lesson), lesson)
+
+    # ---- Stage E: compare step by step, each step checked on its own, picture help on a mistake
+    run_task(pg, 'vergleich_schritte', 2, {'kind': 'verschieden', 'a': [3, 4], 'b': [5, 6], 'mix': 0, 'why': True, 'o': 0})
+    pg.fill('.step input', '10'); pg.click('.task .check'); pg.wait_for_timeout(100)
+    check('common denominator 10 → "nicht durch 4 teilbar"', 'nicht durch 4' in pg.inner_text('.feedback'), pg.inner_text('.feedback'))
+    pg.fill('.step input', '24'); pg.click('.task .check'); pg.wait_for_timeout(100)
+    check('24 accepted with a note about 12', pg.locator('.step-ok').count() == 1 and '12' in pg.inner_text('.step-ok'), pg.inner_text('.task')[:300])
+    d_box = pg.locator('.step').nth(1).locator('.nbox-d')
+    check('second step: denominator 24 filled in and locked', d_box.input_value() == '24' and d_box.is_disabled())
+    pg.locator('.step').nth(1).locator('.nbox-n').fill('3'); pg.click('.task .check'); pg.wait_for_timeout(100)
+    check('numerator not expanded → explained (only this step)', 'Zähler muss auch' in pg.inner_text('.feedback') and pg.locator('.step-ok').count() == 1, pg.inner_text('.feedback'))
+    pg.locator('.step').nth(1).locator('.nbox-n').fill('18'); pg.click('.task .check'); pg.wait_for_timeout(100)
+    pg.locator('.step').nth(2).locator('.nbox-n').fill('20'); pg.click('.task .check'); pg.wait_for_timeout(100)
+    pg.locator('.step').nth(3).locator('.opt[data-id=gt]').click(); pg.click('.task .check'); pg.wait_for_timeout(120)
+    check('wrong sign → explained with 18/24 and 20/24, picture button', '18' in pg.inner_text('.feedback') and pg.locator('.demo-btn').count() == 1, pg.inner_text('.feedback'))
+    pg.click('.demo-btn'); pg.wait_for_timeout(100)
+    check('"Zeig es mir im Bild" shows the strips', pg.locator('.fb-demo .pic-bars').count() == 1)
+    pg.screenshot(path=OUT + '/c03-compare-steps.png', full_page=True)
+    pg.wait_for_timeout(950)
+    pg.locator('.step').nth(3).locator('.opt[data-id=lt]').click(); pg.click('.task .check'); pg.wait_for_timeout(100)
+    pg.locator('.step').nth(4).locator('.opt[data-id=ok]').click(); pg.click('.task .check'); pg.wait_for_timeout(120)
+    check('Stage E solved after self-correction', pg.locator('.fb-box.ok').count() == 1 and 'verbessert' in pg.inner_text('.feedback'), pg.inner_text('.feedback'))
+
+    # ---- missing number with a fixed box, Bruch-Labor as help
+    run_task(pg, 'erw_luecke', 1, {'v': 'nenner', 'a': 2, 'b': 3, 'k': 4})
+    check('2/3 = ?/12: denominator given, numerator to fill', pg.locator('.ans-frac .nbox-d').input_value() == '12' and pg.locator('.ans-frac .nbox-d').is_disabled() and pg.locator('.ans-frac .before .fr').count() == 1)
+    pg.fill('.ans-frac .nbox-n', '11'); pg.click('.task .check'); pg.wait_for_timeout(100)
+    check('?/12 → 11: "addiert" explained', 'addiert' in pg.inner_text('.feedback') or 'plus' in pg.inner_text('.feedback'), pg.inner_text('.feedback'))
+    pg.click('text=🔬 Bruch-Labor'); pg.wait_for_timeout(200)
+    check('Bruch-Labor opens as help with the task fraction', pg.locator('.modal .bruch-labor').count() == 1 and '2' in pg.inner_text('.modal .lab-chain'))
+    pg.click('.modal .modal-x'); pg.wait_for_timeout(80)
+    pg.fill('.ans-frac .nbox-n', '8'); pg.click('.task .check'); pg.wait_for_timeout(100)
+    check('2/3 = 8/12 ✓', pg.locator('.fb-box.ok').count() == 1)
+
+    # ---- table: one wrong cell is marked, then fixed
+    run_task(pg, 'tabelle_erw', 2, {'rows': [[2, 5], [3, 7]], 'ks': [2, 3, 4], 'cells': [['f', 'f', 'f'], ['f', 'f', 'f']], 'hideCol': None})
+    boxes = pg.locator('.ftable input')
+    check('table: 2 rows × 3 columns × (Zähler, Nenner)', boxes.count() == 12, boxes.count())
+    vals = ['4', '10', '6', '15', '8', '20', '6', '14', '9', '7', '12', '28']
+    for i, v in enumerate(vals): boxes.nth(i).fill(v)
+    pg.click('.task .check'); pg.wait_for_timeout(120)
+    check('table: the wrong cell (3/7 · 3 → 9/7) is highlighted and explained', pg.locator('.tbox.bad').count() == 1 and 'Nenner' in pg.inner_text('.feedback') and '5 von 6' in pg.inner_text('.feedback'), pg.inner_text('.feedback'))
+    pg.screenshot(path=OUT + '/c04-table.png', full_page=True)
+    boxes.nth(9).fill('21'); pg.click('.task .check'); pg.wait_for_timeout(120)
+    check('table ✓ after fixing the cell', pg.locator('.fb-box.ok').count() == 1, pg.inner_text('.feedback'))
+
+    # ---- ordering: tap cards, equal fractions next to each other
+    run_task(pg, 'ordnen', 2, {'cards': [[2, 3, 0], [1, 2, 0], [3, 4, 0], [4, 6, 0]], 'dir': 'asc'})
+    for i in [0, 1, 2, 3]: pg.locator('.ord-card[data-i="%d"]' % i).click(); pg.wait_for_timeout(40)
+    pg.click('.task .check'); pg.wait_for_timeout(120)
+    check('order 2/3, 1/2, 3/4, 4/6 → explained (equal ones apart or wrong pair)', pg.locator('.fb-box.no').count() == 1 and pg.locator('.ord-slot.bad').count() >= 1, pg.inner_text('.feedback'))
+    pg.click('text=↺ alle zurück'); pg.click('text=📏 Streifen zeigen (Hilfe)'); pg.wait_for_timeout(80)
+    check('ordering: optional strips as help', pg.locator('.ord-help .pic-bars').count() == 1)
+    for i in [1, 3, 0, 2]: pg.locator('.ord-card[data-i="%d"]' % i).click(); pg.wait_for_timeout(40)
+    pg.click('.task .check'); pg.wait_for_timeout(120)
+    check('1/2 < 4/6 = 2/3 < 3/4 ✓', pg.locator('.fb-box.ok').count() == 1, pg.inner_text('.feedback'))
+    pg.screenshot(path=OUT + '/c05-order.png', full_page=True)
+
+    # ---- Tom's claim, two steps
+    run_task(pg, 'vgl_fehler', 1, {'v': 'nenner', 'who': 3, 'a': 2, 'b': 3, 'k': 2, 'o': 0, 'o2': 0, 'n': 3, 'd1': 4, 'd2': 5})
+    check('"Tom behauptet …"', 'Tom behauptet' in pg.inner_text('.prompt'), pg.inner_text('.prompt'))
+    check('Tom-Aufgabe solvable (recht? + warum?)', solve(pg) == 'ok')
+
+    # ---- pictures: strips, number line, side by side
+    for g, sel in [('gleichwertig_bild', '.pic-bars, .pic-row, .opt .pic'), ('zahlenstrahl', '.pic-numline'), ('vergleich_wahl', '.ans-choice.signs')]:
+        run_task(pg, g, 1)
+        check(g + ': picture/answer shown', pg.locator(sel).count() >= 1, g)
+        check(g + ' solvable', solve(pg) == 'ok')
+    pg.screenshot(path=OUT + '/c06-signs.png', full_page=True)
+
+    # ---- Bruch-Labor page: cut finer, join, compare
+    pg.goto(URL + '?child=lukas#/labor'); pg.wait_for_timeout(300)
+    pg.click('[data-cut="2"]'); pg.wait_for_timeout(60); pg.click('[data-cut="3"]'); pg.wait_for_timeout(60)
+    chain = pg.inner_text('.lab-chain')
+    check('labor: 2/3 → 4/6 → 12/18 (chain), point stays', '12' in chain and '18' in chain and 'derselben Stelle' in pg.inner_text('.lab-msg'), chain)
+    pg.click('[data-join="6"]'); pg.wait_for_timeout(60)
+    check('labor: joining 6 pieces → back to 2/3 (gekürzt durch 6)', 'Gekürzt durch 6' in pg.inner_text('.lab-step'), pg.inner_text('.lab-step'))
+    pg.screenshot(path=OUT + '/c07-labor.png', full_page=True)
+    pg.click('[data-tab=vergleichen]'); pg.wait_for_timeout(80); pg.click('[data-same]'); pg.wait_for_timeout(80)
+    msg = pg.inner_text('.lab-msg')
+    check('labor compare: 3/4 = 9/12, 5/6 = 10/12 → 3/4 < 5/6', '12' in msg and '<' in msg, msg)
+    pg.screenshot(path=OUT + '/c08-labor-compare.png', full_page=True)
+
+    # ---- Streifentafel: compare two fractions
+    pg.goto(URL + '?child=lukas#/streifen'); pg.wait_for_timeout(300)
+    pg.click('text=Viertel & Sechstel'); pg.click('.st-cmp'); pg.wait_for_timeout(80)
+    r4 = pg.locator('.st-row').nth(0).locator('svg').bounding_box(); r6 = pg.locator('.st-row').nth(1).locator('svg').bounding_box()
+    pg.mouse.click(r4['x'] + r4['width'] * 0.75, r4['y'] + 10); pg.wait_for_timeout(80)
+    pg.mouse.click(r6['x'] + r6['width'] * 5 / 6, r6['y'] + 10); pg.wait_for_timeout(80)
+    info = pg.inner_text('.st-info')
+    check('Streifentafel compare: 3/4 < 5/6 on the Zwölftel strip', '<' in info and 'Zwölftel' in info and pg.locator('.st-line.b:visible').count() == 1, info)
+    check('Streifentafel: number line under the strips', pg.locator('.st-numline .pic-numline').count() == 1)
+    pg.screenshot(path=OUT + '/c09-strips-compare.png', full_page=True)
+
+    # ---- progress saved before the update still loads in the browser
+    cold = b.new_context(viewport={'width': 1100, 'height': 900}); cold.add_init_script(MOCK_SPEECH); cold.add_init_script(UNLOCK)
+    old = '{"v":1,"created":1,"skills":{"u2g":{"n":9,"first":9,"m":0.95,"level":2,"box":3,"due":0,"last":5,"hints":0,"corrected":0,"errs":{},"streak":2}},"log":[],"wrong":[],"modules":{"A":1,"C":1},"sessions":[],"coins":{"log":[],"days":{},"mastery":{"u2g":1},"modules":{"A":1,"C":1}},"settings":{"goalDate":"2026-10-19","goalLabel":"Schulbeginn","timer":false,"font":"","voice":"","slowRate":0.8}}'
+    cold.add_init_script("try { if (!localStorage.getItem('bb-test-seeded')) { localStorage.setItem('bruch-bobins:lukas', %r); localStorage.setItem('bb-test-seeded', '1'); } } catch (e) {}" % old)
+    op = cold.new_page(); op.on('pageerror', lambda e: errors.append('old-data pageerror: ' + str(e)))
+    op.goto(URL + '?child=lukas'); op.wait_for_timeout(400)
+    check('old progress: modules A and C still ✓ gelernt', op.locator('[data-module=A] .tag.ok').count() == 1 and op.locator('[data-module=C] .tag.ok').count() == 1)
+    check('old progress: u2g still sicher', op.evaluate("BB.app.progress.mastery('u2g').key") == 'sicher')
+    op.click('[data-menu=heute]'); op.wait_for_timeout(300)
+    j = 0
+    while cur(op) and j < 14: solve(op); nxt(op); j += 1
+    check('old progress: Heute üben runs', op.locator('.end').count() == 1, j)
+    cold.close()
+
     # ---------------- phone + tablet
     for name, vp in [('phone', {'width': 390, 'height': 844}), ('tablet', {'width': 820, 'height': 1180})]:
         c2 = b.new_context(viewport=vp, has_touch=True, is_mobile=name == 'phone')
         c2.add_init_script(MOCK_SPEECH); c2.add_init_script(UNLOCK)
         ph = c2.new_page(); ph.on('pageerror', lambda e: errors.append(name + ' pageerror: ' + str(e)))
-        for route in ['', 'streifen', 'werkstatt', 'lernen/D', 'ueben']:
+        for route in ['', 'streifen', 'werkstatt', 'lernen/D', 'ueben', 'labor', 'lernen/M', 'lernen/K', 'eltern']:
             ph.goto(URL + '?child=lukas#/' + route); ph.wait_for_timeout(300)
             check('%s: no sideways scrolling (%s)' % (name, route or 'home'), ph.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'))
         ph.screenshot(path=OUT + '/b17-%s-lesson.png' % name, full_page=True)
-        for g in ['werkstatt', 'jug_read', 'gemischt_bild', 'einkauf', 'erkennen_wahl']:
+        for g in ['werkstatt', 'jug_read', 'gemischt_bild', 'einkauf', 'erkennen_wahl', 'tabelle_erw', 'tabelle_kuerz', 'ordnen', 'vergleich_schritte', 'gleichwertig_bild', 'zahlenstrahl', 'vergleich_wahl', 'gleichnamig', 'vgl_fehler']:
             ph.evaluate("""g => { const s = BB.session.create(BB.app.progress, {mode:'lernen', tasks:[{gen:g, level:2}]}); BB.practice.run(BB.app, s, {title:'T'}); }""", g)
             ph.wait_for_timeout(200)
             check('%s: no sideways scrolling (%s)' % (name, g), ph.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'))
             if g == 'werkstatt': ph.screenshot(path=OUT + '/b18-%s-workshop.png' % name, full_page=True)
+            if g in ('tabelle_erw', 'ordnen', 'vergleich_schritte'): ph.screenshot(path=OUT + '/c1x-%s-%s.png' % (name, g), full_page=True)
             check('%s: %s solvable' % (name, g), solve(ph) == 'ok')
         c2.close()
 

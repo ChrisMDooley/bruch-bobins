@@ -16,19 +16,98 @@
   }
   function intOf(i) { return i.value === '' ? null : parseInt(i.value, 10); }
 
-  // Fraction boxes; whole: 'none' | 'optional' | 'required'
+  // Fraction boxes; whole: 'none' | 'optional' | 'required'.
+  // a.fixed {n} or {d}: that box is filled in and locked (missing-number tasks: {2/3} = {?/12}); a.before: markup in front.
   function frac(a, onEnter) {
     var w = numBox('nbox-w', 'Ganze', onEnter), n = numBox('nbox-n', 'Zähler', onEnter), d = numBox('nbox-d', 'Nenner', onEnter);
-    var showW = a.whole === 'required' || a.whole === 'optional';
-    var wrap = h('div', { class: 'ans-frac' + (a.whole === 'required' ? ' need-w' : '') }, [
+    var showW = a.whole === 'required' || a.whole === 'optional', fixed = a.fixed || {};
+    function applyFixed() {
+      fixed = a.fixed || {};
+      [[n, 'n'], [d, 'd']].forEach(function (x) { var on = fixed[x[1]] != null; x[0].disabled = on; x[0].classList.toggle('given', on); if (on) x[0].value = fixed[x[1]]; });
+    }
+    var wrap = h('div', { class: 'ans-frac' + (a.whole === 'required' ? ' need-w' : '') + (a.before ? ' with-before' : '') }, [
+      a.before ? h('span', { class: 'before', rich: a.before }) : null,
       showW ? h('label', { class: 'wbox' }, [w, h('span', { class: 'lab', text: a.whole === 'required' ? 'Ganze' : 'Ganze (wenn nötig)' })]) : null,
       h('div', { class: 'fbox' }, [n, h('span', { class: 'fline', 'aria-hidden': 'true' }), d]),
       a.after ? h('span', { class: 'after', rich: a.after }) : null]);
+    applyFixed();
     wrap.value = function () { return { w: showW ? intOf(w) : null, n: intOf(n), d: intOf(d) }; };
-    wrap.focus = function () { (a.whole === 'required' ? w : n).focus(); };
+    wrap.focus = function () { (a.whole === 'required' ? w : fixed.n != null ? d : n).focus(); };
     wrap.lock = function () { [w, n, d].forEach(function (x) { x.disabled = true; }); };
-    wrap.clearInput = function () { [w, n, d].forEach(function (x) { x.value = ''; }); };
+    wrap.clearInput = function () { [w, n, d].forEach(function (x) { x.value = ''; }); applyFixed(); };
     wrap.fill = function (k) { w.value = k.w == null ? '' : k.w; n.value = k.n == null ? '' : k.n; d.value = k.d == null ? '' : k.d; };
+    return wrap;
+  }
+
+  // Table (Brüche in Tabellen erweitern/kürzen). a.heads: [{label} | {slot}], a.rows: [{start, cells: [{given} | {slot, fixed}]}], a.slots.
+  function table(a, onEnter) {
+    var inputs = [];   // per slot: {kind, el, get, set, boxes}
+    function fracCell(slot) {
+      var sl = a.slots[slot], n = numBox('nbox-n tn', 'Zähler', onEnter), d = numBox('nbox-d tn', 'Nenner', onEnter), fx0 = sl.fixed || {};
+      if (fx0.n != null) { n.value = fx0.n; n.disabled = true; n.classList.add('given'); }
+      if (fx0.d != null) { d.value = fx0.d; d.disabled = true; d.classList.add('given'); }
+      var box = h('div', { class: 'fbox tbox', 'data-slot': slot }, [n, h('span', { class: 'fline', 'aria-hidden': 'true' }), d]);
+      inputs[slot] = { kind: 'frac', el: box, boxes: [n, d], get: function () { return { n: intOf(n), d: intOf(d) }; }, set: function (k) { n.value = k.n; d.value = k.d; } };
+      return box;
+    }
+    function numCell(slot, pre) {
+      var x = numBox('nbox-x tn', 'Zahl', onEnter), box = h('span', { class: 'thead-in', 'data-slot': slot }, [h('span', { text: pre }), x]);
+      inputs[slot] = { kind: 'num', el: box, boxes: [x], get: function () { return { x: intOf(x) }; }, set: function (k) { x.value = k.x; } };
+      return box;
+    }
+    var op = a.rows.length && a.heads.some(function (hh) { return /^:/.test(hh.label || ''); }) ? ': ' : '· ';
+    var thead = h('tr', {}, [h('th', { text: a.corner || 'Bruch' })].concat(a.heads.map(function (hh) { return h('th', { class: hh.vol ? 'vol' : '' }, [hh.slot != null ? numCell(hh.slot, op) : h('span', { text: hh.label })]); })));
+    var body = a.rows.map(function (r) {
+      return h('tr', {}, [h('th', { class: 'tstart', rich: '{' + r.start.n + '/' + r.start.d + '}' })].concat(r.cells.map(function (c) {
+        return h('td', {}, [c.given ? h('span', { class: 'tgiven', rich: '{' + c.given.n + '/' + c.given.d + '}' }) : fracCell(c.slot)]);
+      })));
+    });
+    var tbl = h('table', { class: 'ftable' }, [h('thead', {}, [thead]), h('tbody', {}, body)]);
+    var wrap = h('div', { class: 'ans-table' }, [h('div', { class: 'ftable-scroll' }, [tbl])]);
+    inputs.forEach(function (it) { it.boxes.forEach(function (b) { b.addEventListener('input', function () { it.el.classList.remove('bad'); }); }); });
+    wrap.value = function () { return { cells: inputs.map(function (it) { return it.get(); }) }; };
+    wrap.focus = function () { var f = wrap.querySelector('input:not([disabled])'); if (f) f.focus(); };
+    wrap.lock = function () { inputs.forEach(function (it) { it.boxes.forEach(function (b) { b.disabled = true; }); }); };
+    wrap.clearInput = function () { inputs.forEach(function (it) { it.boxes.forEach(function (b) { if (!b.classList.contains('given')) b.value = ''; }); }); };
+    wrap.fill = function (k) { (k.cells || []).forEach(function (c, i) { if (inputs[i]) inputs[i].set(c); }); };
+    wrap.markWrong = function (r) { inputs.forEach(function (it, i) { it.el.classList.toggle('bad', !!(r && r.bad && r.bad.indexOf(i) >= 0)); }); };
+    return wrap;
+  }
+
+  // Ordering fraction cards: tap a card to put it in the next place, tap a placed card to take it back.
+  // With a mouse, cards can also be dragged onto a place. Optional help: the cards as strips.
+  function order(a) {
+    var placed = [], N = a.cards.length, locked = false, dragFrom = null;
+    var label = function (c) { return c.mix && c.n > c.d ? '{' + Math.floor(c.n / c.d) + ' ' + c.n % c.d + '/' + c.d + '}' : '{' + c.n + '/' + c.d + '}'; };
+    var pool = h('div', { class: 'ord-pool', 'aria-label': 'Karten' }), row = h('ol', { class: 'ord-row', 'aria-label': a.dir === 'asc' ? 'vom kleinsten zum größten' : 'vom größten zum kleinsten' });
+    var cards = a.cards.map(function (c, i) {
+      var b = h('button', { class: 'ord-card', type: 'button', draggable: 'true', 'data-i': i, 'aria-label': 'Karte ' + T.plain(label(c)) }, [h('span', { rich: label(c) })]);
+      b.addEventListener('click', function () { if (locked) return; var at = placed.indexOf(i); if (at >= 0) placed.splice(at, 1); else placed.push(i); draw(); });
+      b.addEventListener('dragstart', function (e) { dragFrom = i; try { e.dataTransfer.setData('text/plain', String(i)); } catch (x) { /* ignore */ } });
+      return b;
+    });
+    var slots = [];
+    for (var k = 0; k < N; k++) (function (k) {
+      var li = h('li', { class: 'ord-slot', 'data-k': k });
+      li.addEventListener('dragover', function (e) { e.preventDefault(); });
+      li.addEventListener('drop', function (e) { e.preventDefault(); if (locked || dragFrom == null) return; var at = placed.indexOf(dragFrom); if (at >= 0) placed.splice(at, 1); placed.splice(Math.min(k, placed.length), 0, dragFrom); dragFrom = null; draw(); });
+      slots.push(li); row.appendChild(li);
+    })(k);
+    var ends = h('div', { class: 'ord-ends', 'aria-hidden': 'true' }, [h('span', { text: a.dir === 'asc' ? 'kleinster' : 'größter' }), h('span', { text: '➜' }), h('span', { text: a.dir === 'asc' ? 'größter' : 'kleinster' })]);
+    var helpBox = h('div', { class: 'ord-help', hidden: true });
+    var helpBtn = a.help ? h('button', { class: 'link small', type: 'button', text: '📏 Streifen zeigen (Hilfe)', onclick: function () { helpBox.hidden = !helpBox.hidden; if (!helpBox.firstChild) helpBox.appendChild(D.render(a.help)); helpBtn.textContent = helpBox.hidden ? '📏 Streifen zeigen (Hilfe)' : '📏 Streifen ausblenden'; } }) : null;
+    var wrap = h('div', { class: 'ans-order' }, [ends, row, h('p', { class: 'note ord-note', text: 'Karten:' }), pool, h('div', { class: 'row' }, [h('button', { class: 'link small', type: 'button', text: '↺ alle zurück', onclick: function () { if (!locked) { placed = []; draw(); } } }), helpBtn]), helpBox]);
+    function draw() {
+      slots.forEach(function (li, k) { li.innerHTML = ''; li.classList.remove('bad'); if (placed[k] != null) li.appendChild(cards[placed[k]]); else li.appendChild(h('span', { class: 'ord-empty', text: String(k + 1) })); });
+      cards.forEach(function (c, i) { if (placed.indexOf(i) < 0) pool.appendChild(c); c.classList.toggle('placed', placed.indexOf(i) >= 0); });
+    }
+    draw();
+    wrap.value = function () { return { order: placed.slice() }; };
+    wrap.focus = function () { if (cards[0]) cards[0].focus(); };
+    wrap.lock = function () { locked = true; cards.forEach(function (c) { c.disabled = true; c.draggable = false; }); };
+    wrap.clearInput = function () { placed = []; draw(); };
+    wrap.fill = function (k) { placed = (k.order || []).slice(); draw(); };
+    wrap.markWrong = function (r) { if (r && r.bad) r.bad.forEach(function (k) { if (slots[k]) slots[k].classList.add('bad'); }); };
     return wrap;
   }
   function division(a, onEnter) {
@@ -69,7 +148,7 @@
   }
   function choice(a) {
     var sel = a.multi ? {} : null, btns = [];
-    var wrap = h('div', { class: 'ans-choice' + (a.pictures ? ' pictures' : '') + (a.long ? ' long' : '') + (a.multi ? ' multi' : ''), role: a.multi ? 'group' : 'radiogroup' });
+    var wrap = h('div', { class: 'ans-choice' + (a.pictures ? ' pictures' : '') + (a.long ? ' long' : '') + (a.multi ? ' multi' : '') + (a.signs ? ' signs' : ''), role: a.multi ? 'group' : 'radiogroup' });
     a.options.forEach(function (o) {
       var b = h('button', { class: 'opt', type: 'button', 'data-id': o.id, role: a.multi ? 'checkbox' : 'radio', 'aria-checked': 'false' },
         [o.visual ? D.render(o.visual) : null, o.label ? h('span', { class: 'opt-label', rich: o.label }) : null]);
@@ -85,6 +164,7 @@
     wrap.lock = function () { btns.forEach(function (b) { b.disabled = true; }); };
     wrap.clearInput = function () { sel = a.multi ? {} : null; btns.forEach(function (b) { b.classList.remove('chosen', 'wrong'); b.setAttribute('aria-checked', 'false'); }); };
     wrap.markWrong = function () { btns.forEach(function (b) { if (b.classList.contains('chosen')) b.classList.add('wrong'); }); };
+    if (a.signs) btns.forEach(function (b) { b.setAttribute('aria-label', { lt: 'kleiner als', gt: 'größer als', eq: 'gleich' }[b.getAttribute('data-id')] || b.textContent); });
     wrap.markRight = function (ids) { ids = [].concat(ids); btns.forEach(function (b) { if (ids.indexOf(b.getAttribute('data-id')) >= 0) b.classList.add('right'); }); };
     wrap.fill = function (k) { var ids = k.ids || [k.id]; btns.forEach(function (b) { var on = ids.indexOf(b.getAttribute('data-id')) >= 0; b.classList.toggle('chosen', on); if (on) b.classList.add('right'); }); sel = a.multi ? ids.reduce(function (m, x) { m[x] = true; return m; }, {}) : k.id; };
     return wrap;
@@ -125,6 +205,8 @@
       case 'choice': return Array.isArray(a.correct) ? { ids: a.correct } : { id: a.correct };
       case 'shade': return { count: a.need };
       case 'jug': return { ml: a.target };
+      case 'table': return { cells: a.slots.map(function (sl) { return sl.kind === 'num' ? { x: sl.value } : { n: sl.value.n, d: sl.value.d }; }) };
+      case 'order': return { order: a.correct.slice() };
     }
     return null;
   }
@@ -139,6 +221,8 @@
       case 'shade': return shade(a);
       case 'jug': return jug(a);
       case 'share': return root.BB.share.workshop(a, onEnter);
+      case 'table': return table(a, onEnter);
+      case 'order': return order(a);
     }
     throw new Error('no widget for ' + a.type);
   }

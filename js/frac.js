@@ -39,6 +39,15 @@
   // integer times fraction must be whole: e.g. 3/4 of 1000 → 750 (else null)
   function ofInt(f, k) { var x = f.n * k; return x % f.d === 0 ? x / f.d : null; }
 
+  // all divisors of n (n ≥ 1), ascending; common divisors of a and b
+  function divisors(n) { n = Math.abs(n); var out = []; for (var i = 1; i <= n; i++) if (n % i === 0) out.push(i); return out; }
+  function commonDivisors(a, b) { return divisors(gcd(a, b)); }
+  function lcmAll(list) { return list.reduce(function (m, x) { return lcm(m, x); }, 1); }
+  // expand by k / reduce by k, keeping the given form (no auto-reduction)
+  function expand(f, k) { return make(f.n * k, f.d * k); }
+  function shrink(f, k) { if (f.n % k || f.d % k) return null; return make(f.n / k, f.d / k); }
+  function same(a, b) { return a.n === b.n && a.d === b.d; }                // same notation, not only same value
+
   function str(f) { return f.n + '/' + f.d; }
   function mixedStr(f) { var m = toMixed(f); return m.w ? (m.n ? m.w + ' ' + m.n + '/' + m.d : String(m.w)) : m.n + '/' + m.d; }
 
@@ -55,5 +64,5 @@
   root.BB = root.BB || {};
   root.BB.frac = { gcd: gcd, lcm: lcm, make: make, reduce: reduce, eq: eq, cmp: cmp, add: add, sub: sub, mulInt: mulInt, divInt: divInt,
                    isLowest: isLowest, isProper: isProper, isWhole: isWhole, value: value, toMixed: toMixed, fromMixed: fromMixed,
-                   ofInt: ofInt, str: str, mixedStr: mixedStr, parse: parse };
+                   ofInt: ofInt, divisors: divisors, commonDivisors: commonDivisors, lcmAll: lcmAll, expand: expand, shrink: shrink, same: same, str: str, mixedStr: mixedStr, parse: parse };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -7,6 +7,8 @@
  *   [3 kg]     an important number/unit (highlight) → "3 Kilogramm"
  *   *Wort*     bold
  *   3 : 4      division                             → "3 geteilt durch 4"
+ *   {2 · 4/3 · 4}  a fraction with a calculation in Zähler and Nenner (Erweitern/Kürzen), shown stacked
+ *   <  >       "ist kleiner als" / "ist größer als" when read aloud
  */
 (function (root) {
   'use strict';
@@ -56,12 +58,16 @@
                    '€': 'Euro', 'ct': 'Cent', 'h': 'Stunden', 'min': 'Minuten', 'Pfd.': 'Pfund' };
 
   // Text for the speech engine.
+  function opWord(o) { return o === '·' ? ' mal ' : ' geteilt durch '; }
   function say(s) {
     return String(s)
+      .replace(/\{(\d+) ([·:]) (\d+)\/(\d+) ([·:]) (\d+)\}/g, function (_, a, o, k, b, o2, k2) { return 'Zähler ' + a + opWord(o) + k + ', Nenner ' + b + opWord(o2) + k2 + ','; })
       .replace(/\{(\d+) (\d+)\/(\d+)\}/g, function (_, w, n, d) { return mixedWords(+w, +n, +d); })
       .replace(/\{(\d+)\/(\d+)\}/g, function (_, n, d) { return fracWords(+n, +d); })
       .replace(/[\[\]*]/g, '')
       .replace(/(\d)\s*:\s*(\d)/g, '$1 geteilt durch $2')
+      .replace(/(\d)\s*·\s*(\d)/g, '$1 mal $2')
+      .replace(/\s<\s/g, ' ist kleiner als ').replace(/\s>\s/g, ' ist größer als ').replace(/\s▢\s/g, ' … ')
       .replace(/(\d+(?:,\d+)?)\s*(kg|ml|km|cm|ct|min|Pfd\.|g|l|m|€|h)(?![a-zäöüß])/g, function (_, x, u) { return x + ' ' + UNIT_SAY[u]; })
       .replace(/(Viertel|Halbe|Drittel|tel|stel|halb)\s*(kg|ml|km|cm|ct|min|g|l|m|€|h)(?![a-zäöüß])/g, function (_, x, u) { return x + ' ' + UNIT_SAY[u]; })
       .replace(/\s+/g, ' ').trim();
@@ -76,21 +82,23 @@
     var a = doc.createElement('span'); a.className = 'fr-n'; a.textContent = n;
     var b = doc.createElement('span'); b.className = 'fr-d'; b.textContent = d;
     st.appendChild(a); st.appendChild(b); wrap.appendChild(st);
-    wrap.setAttribute('aria-label', w ? mixedWords(+w, +n, +d) : fracWords(+n, +d));
+    wrap.setAttribute('aria-label', w ? mixedWords(+w, +n, +d) : isNaN(+n) || isNaN(+d) ? n + ' durch ' + d : fracWords(+n, +d));
+    if (isNaN(+n) || isNaN(+d)) wrap.className += ' fr-calc';
     return wrap;
   }
 
   // Render markup into a DOM fragment (all text escaped — built with text nodes only).
   function rich(s, into) {
     var doc = root.document, frag = into || doc.createDocumentFragment();
-    var re = /\{(\d+) (\d+)\/(\d+)\}|\{(\d+)\/(\d+)\}|\[([^\]]+)\]|\*([^*]+)\*/g, last = 0, m;
+    var re = /\{(\d+ [·:] \d+)\/(\d+ [·:] \d+)\}|\{(\d+) (\d+)\/(\d+)\}|\{(\d+)\/(\d+)\}|\[([^\]]+)\]|\*([^*]+)\*/g, last = 0, m;
     s = String(s);
     while ((m = re.exec(s))) {
       if (m.index > last) frag.appendChild(doc.createTextNode(s.slice(last, m.index)));
-      if (m[1]) frag.appendChild(fracEl(m[2], m[3], m[1]));
-      else if (m[4]) frag.appendChild(fracEl(m[4], m[5]));
-      else if (m[6]) { var q = doc.createElement('span'); q.className = 'qty'; rich(m[6], q); frag.appendChild(q); }
-      else { var b = doc.createElement('b'); rich(m[7], b); frag.appendChild(b); }
+      if (m[1]) frag.appendChild(fracEl(m[1], m[2]));
+      else if (m[3]) frag.appendChild(fracEl(m[4], m[5], m[3]));
+      else if (m[6]) frag.appendChild(fracEl(m[6], m[7]));
+      else if (m[8]) { var q = doc.createElement('span'); q.className = 'qty'; rich(m[8], q); frag.appendChild(q); }
+      else { var b = doc.createElement('b'); rich(m[9], b); frag.appendChild(b); }
       last = re.lastIndex;
     }
     if (last < s.length) frag.appendChild(doc.createTextNode(s.slice(last)));
@@ -104,9 +112,11 @@
   }
   // 1234 → "1234", money: 125 ct → "1,25 €"
   function euro(ct) { var e = Math.floor(ct / 100), c = ct % 100; return c ? e + ',' + (c < 10 ? '0' : '') + c + ' €' : e + ' €'; }
-  function plain(s) { return String(s).replace(/\{(\d+) (\d+)\/(\d+)\}/g, '$1 $2/$3').replace(/\{(\d+)\/(\d+)\}/g, '$1/$2').replace(/[\[\]*]/g, ''); }
+  // {2 · 4/3 · 4}: the calculation stacked like a fraction
+  function fx(n, op, k, d) { return '{' + n + ' ' + op + ' ' + k + '/' + d + ' ' + op + ' ' + k + '}'; }
+  function plain(s) { return String(s).replace(/\{(\d+ [·:] \d+)\/(\d+ [·:] \d+)\}/g, '($1)/($2)').replace(/\{(\d+) (\d+)\/(\d+)\}/g, '$1 $2/$3').replace(/\{(\d+)\/(\d+)\}/g, '$1/$2').replace(/[\[\]*]/g, ''); }
 
   root.BB = root.BB || {};
   root.BB.text = { word: word, count: count, countAcc: countAcc, cap: cap, denomWord: denomWord, fracWords: fracWords, mixedWords: mixedWords, stripName: stripName,
-                   say: say, rich: rich, fracEl: fracEl, fm: fm, euro: euro, plain: plain };
+                   say: say, rich: rich, fracEl: fracEl, fm: fm, fx: fx, euro: euro, plain: plain };
 })(typeof window !== 'undefined' ? window : globalThis);

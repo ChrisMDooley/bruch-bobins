@@ -31,16 +31,40 @@
     geld:      [['anteil_von', 2], ['umrechnen', 1, '€']],
     zeit:      [['umrechnen', 1, 'h']],
     sach:      [['einkauf', 1], ['menge', 1], ['geschichte', 2]],
-    warum:     [['warum', 1]]
+    warum:     [['warum', 1]],
+    // Kapitel 2
+    erweitern:    [['erw_mit', 1]],
+    faktor:       [['faktor_bestimmen', 2], ['erw_oder_kuerz', 1]],
+    kuerzen:      [['kuerzen_mit', 2], ['kuerzen_frei', 2]],
+    vollstaendig: [['vollstaendig', 2], ['ggt', 1], ['anteil_kuerzen', 1]],
+    zielnenner:   [['erw_luecke', 2], ['kuerz_luecke', 2]],
+    tabelle:      [['tabelle_erw', 1], ['tabelle_kuerz', 1]],
+    gleichwertig: [['gleichwertig_wahl', 2], ['gleichwertig_bild', 2], ['zahlenstrahl', 1]],
+    gleichnamig:  [['gleichnamig', 2], ['kgv_nenner', 1]],
+    vergleichen:  [['vergleich_wahl', 2], ['vergleich_schritte', 2], ['vergleich_sach', 1]],
+    ordnen:       [['ordnen', 1]],
+    vgl_warum:    [['vgl_fehler', 1], ['warum2', 1]]
   };
   function tagsOf(id) { return G.byId[id].tags; }
   function hasTag(id, tag) { return tagsOf(id).indexOf(tag) >= 0; }
-  var HEAVY = { werkstatt: 1, einkauf: 1, einheit_teilen: 1, jug_mark: 1, jug_read: 1, gemischt_bild: 1, div_kontext: 1 };   // not for Schnelltraining
+  var HEAVY = { werkstatt: 1, einkauf: 1, einheit_teilen: 1, jug_mark: 1, jug_read: 1, gemischt_bild: 1, div_kontext: 1,
+                tabelle_erw: 1, tabelle_kuerz: 1, gleichnamig: 1, vergleich_schritte: 1, ggt: 1, ordnen: 1, vgl_fehler: 1 };   // not for Schnelltraining
+
+  // Prüfungstraining blueprints: Kapitel 1 (as before), Kapitel 2 (the current Klassenarbeit topic), or both.
+  var EXAM = {
+    k1: ['erkennen', 'zeichnen', 'echt_wahl', 'u2g', 'g2u', 'div_bruch', 'verteilen', 'verteilen_liter', 'einheit_teilen', 'umrechnen', 'jug_read', 'warum'],
+    k2: ['erw_luecke', 'kuerz_luecke', 'vollstaendig', 'faktor_bestimmen', 'tabelle_erw', 'gleichwertig_bild', 'gleichwertig_wahl', 'gleichnamig', 'vergleich_wahl', 'vergleich_schritte', 'ordnen', 'vgl_fehler']
+  };
+  EXAM.alle = ['erkennen', 'u2g', 'div_bruch', 'verteilen', 'einheit_teilen', 'jug_read', 'erw_luecke', 'vollstaendig', 'tabelle_kuerz', 'vergleich_wahl', 'vergleich_schritte', 'ordnen'];
+  // Focus on the chapter that is taught at school now: its skills are chosen ×2 as often (the rest is still reviewed).
+  var FOCUS_BOOST = 2;
 
   function create(pr, opts) {
     opts = opts || {};
     var mode = opts.mode || 'ueben', rand = opts.rand || Math.random, R = G.makeR(rand);
-    var queue = [], done = [], lastGen = null, coins = 0, bonus = 0, streak = 0, extraWhy = 0, mastered = [], started = Date.now();
+    var queue = [], done = [], lastGen = null, coins = 0, bonus = 0, streak = 0, extraWhy = 0, checkBacks = 0, mastered = [], started = Date.now();
+    var focus = (pr.settings && pr.settings().focus) || 'k2';
+    function need(id) { return pr.weight(id) * (focus !== 'alle' && M.unitOf(id) === focus ? FOCUS_BOOST : 1); }
     var limit = { heute: 10, ueben: 10, schnell: 8, sach: 6, bild: 6, pruefung: 12, fehler: 8, skill: 8 }[mode] || 10;
 
     function weighted(items, wfn) {
@@ -67,29 +91,30 @@
       return t;
     }
     function pick(filter, levelShift, pool) {
-      var sk = weighted(pool || skillsWith(filter), function (id) { return pr.weight(id); });
+      var sk = weighted(pool || skillsWith(filter), need);
       return task(sk, filter, levelShift);
     }
 
     // ---- build the plan
     if (mode === 'heute') {
-      var due = pr.due().sort(function (a, b) { return pr.weight(b) - pr.weight(a); });
+      var due = pr.due().sort(function (a, b) { return need(b) - need(a); });
       queue.push(function () { return due[0] ? task(due[0]) : pick(); });
       queue.push(function () { return due[1] ? task(due[1]) : pick(); });
       queue.push(function () { return pick(function (g) { return hasTag(g, 'visual'); }); });
       queue.push(function () { return pick(function (g) { return hasTag(g, 'visual'); }); });
       queue.push(function () { return pick(function (g) { return hasTag(g, 'convert'); }); });
-      queue.push(function () { return pick(function (g) { return hasTag(g, 'convert'); }); });
+      // with Kapitel 2 in focus, one conversion slot always compares (the priority: gleichnamig machen & vergleichen)
+      queue.push(function () { return focus === 'k2' ? pick(function (g) { return hasTag(g, 'convert'); }, 0, ['vergleichen', 'gleichnamig']) : pick(function (g) { return hasTag(g, 'convert'); }); });
       queue.push(function () { return pick(function (g) { return hasTag(g, 'world'); }); });
       queue.push(function () { return pick(function (g) { return hasTag(g, 'world'); }); });
-      queue.push(function () { return task('warum'); });
+      queue.push(function () { return task(focus === 'k1' ? 'warum' : focus === 'k2' ? (rand() < 0.65 ? 'vgl_warum' : 'warum') : (rand() < 0.5 ? 'vgl_warum' : 'warum')); });
       queue.push(function () {   // challenge: a stronger skill one level up, or a multi-step task
-        var seen = Object.keys(BY_SKILL).filter(function (id) { return (pr.doc.skills[id] || {}).n; });
+        var seen = Object.keys(BY_SKILL).filter(function (id) { return (pr.doc.skills[id] || {}).n && (focus === 'alle' || M.unitOf(id) === focus); });
         var strong = seen.sort(function (a, b) { return pr.doc.skills[b].m - pr.doc.skills[a].m; })[0];
         return strong && rand() < 0.5 ? task(strong, null, 1) : pick(function (g) { return hasTag(g, 'challenge') || g === 'einheit_teilen' || g === 'werkstatt'; }, 1);
       });
     } else if (mode === 'pruefung') {
-      ['erkennen', 'zeichnen', 'echt_wahl', 'u2g', 'g2u', 'div_bruch', 'verteilen', 'verteilen_liter', 'einheit_teilen', 'umrechnen', 'jug_read', 'warum'].forEach(function (g) {
+      (EXAM[focus] || EXAM.k2).forEach(function (g) {
         queue.push(function () { var sk = G.byId[g].skill; lastGen = g; return G.make(g, Math.max(2, pr.level(sk)), null, rand, g === 'umrechnen' ? R.pick(['kg', 'l', 'km', '€']) : null); });
       });
     } else if (opts.tasks) {     // given tasks: "Fehler verbessern" after Prüfungstraining, or the tasks of a lesson
@@ -127,6 +152,12 @@
         out.coins = mode === 'pruefung' ? (r.firstTry && !r.hint ? pr.taskCoins(t, r) : 0) : pr.taskCoins(t, r);
         if (t.fromMistake && r.ok && !r.solution && !r.corrected) { out.coins += 1; }          // a former mistake, now solved
         if (r.firstTry && !r.hint) { streak++; if (streak % 5 === 0) { out.bonus += 1; out.streakBonus = streak; } } else streak = 0;
+        // not right at once → a similar task a little later in the same round, to check it is understood now
+        if (!(r.firstTry && !r.hint) && !t.followUp && !t.checkBack && checkBacks < 2 && (mode === 'heute' || mode === 'ueben' || mode === 'skill')) {
+          checkBacks++; out.checkBack = true;
+          var g0 = t.gen, lv0 = t.level, want0 = t.params && t.params.want;
+          queue.splice(Math.min(2, queue.length), 0, function () { var x = G.make(g0, lv0, null, rand, want0); x.checkBack = true; return x; });
+        }
         if (rec.mastered && pr.claimMastery(t.skill)) { out.bonus += 5; out.mastered = true; mastered.push(t.skill); }
         coins += out.coins; bonus += out.bonus;
         done.push({ t: t, r: r });
@@ -151,5 +182,5 @@
     return s;
   }
 
-  root.BB.session = { create: create, BY_SKILL: BY_SKILL, HEAVY: HEAVY };
+  root.BB.session = { create: create, BY_SKILL: BY_SKILL, HEAVY: HEAVY, EXAM: EXAM };
 })(typeof window !== 'undefined' ? window : globalThis);

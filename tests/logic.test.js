@@ -29,7 +29,7 @@ const SOL = { firstTry: false, ok: false, tries: 2, hint: 4, solution: true, sec
   ok(tag(tasks[2], 'visual') && tag(tasks[3], 'visual'), 'slots 3–4 visual', tasks.map(t => t.gen));
   ok(tag(tasks[4], 'convert') && tag(tasks[5], 'convert'), 'slots 5–6 conversion', tasks.map(t => t.gen));
   ok(tag(tasks[6], 'world') && tag(tasks[7], 'world'), 'slots 7–8 real world', tasks.map(t => t.gen));
-  ok(tasks[8].gen === 'warum', 'slot 9 Warum?', tasks[8].gen);
+  ok(tasks[8].tags.indexOf('why') >= 0, 'slot 9 Warum?', tasks[8].gen);
   const sum = s.finish();
   ok(sum.n === 10 && sum.first === 10, 'summary counts');
   ok(sum.total >= 15 && sum.total <= 25, 'a perfect Heute round ≈ 15–25 coins (like the Europa-Trainer)', sum.total);
@@ -127,7 +127,7 @@ const SOL = { firstTry: false, ok: false, tries: 2, hint: 4, solution: true, sec
 
 // ---- simulated learner: weak skills get more practice, mastery grows
 {
-  const { BB, pr } = fresh();
+  const { BB, pr } = fresh(); pr.setSetting('focus', 'alle');
   const ability = { verteilen: 0.35, einheiten: 0.4 };   // these two are hard for him at first
   const count = {}; let day0 = Date.now();
   for (let day = 0; day < 14; day++) {
@@ -151,6 +151,113 @@ const SOL = { firstTry: false, ok: false, tries: 2, hint: 4, solution: true, sec
   const { pr } = fresh();
   ok(pr.settings().goalDate === '2026-10-19' && pr.settings().goalLabel === 'Schulbeginn', 'goal: back to school on 19 Oct');
   ok(typeof pr.daysToGoal() === 'number', 'days to goal');
+}
+
+// ================================================================ Kapitel 2
+
+// ---- saved progress from before the update loads unchanged
+{
+  const W = load(), BB = W.BB;
+  const old = { v: 1, created: 1, skills: { u2g: { n: 9, first: 9, m: 0.95, level: 2, box: 3, due: 0, last: 5, hints: 0, corrected: 0, errs: {}, streak: 2 } },
+    log: [{ ts: Date.now(), skill: 'u2g', gen: 'u2g', level: 2, ok: true, first: true, tries: 1, hint: 0, sol: false, secs: 20, err: null, corr: false, mode: 'heute' }],
+    wrong: [{ key: 'g2u:{"n":9,"d":4}', gen: 'g2u', params: { n: 9, d: 4 }, level: 1, skill: 'g2u', err: 'mixed', ts: 1, n: 1 }], modules: { A: 1 }, sessions: [],
+    coins: { log: [{ ts: 1, amount: 20, reason: 'heute' }], days: {}, mastery: { u2g: 1 }, modules: { A: 1 } },
+    settings: { goalDate: '2026-10-19', goalLabel: 'Schulbeginn', timer: false, font: 'dyslexic', voice: '', slowRate: 0.8 } };
+  W.localStorage.setItem('bruch-bobins:lukas', JSON.stringify(old));
+  const pr = new BB.Progress('lukas', W.localStorage);
+  ok(pr.mastery('u2g').key === 'sicher' && pr.moduleDone('A') && pr.doc.coins.mastery.u2g && pr.settings().font === 'dyslexic', 'old progress, modules, coins and settings kept', pr.doc);
+  ok(pr.settings().focus === 'k2', 'new setting "focus" gets its default (Kapitel 2)');
+  ok(pr.overview().length === 27 && pr.overview().filter(o => BB.model.unitOf(o.id) === 'k2').every(o => o.n === 0), 'new skills appear empty next to the old ones');
+  const s = BB.session.create(pr, { mode: 'fehler' }); const t = s.next();
+  ok(t && t.gen === 'g2u' && t.fromMistake, 'old mistakes still come back in Fehlertraining', t && t.gen);
+  pr.save(); const again = new BB.Progress('lukas', W.localStorage);
+  ok(again.mastery('u2g').key === 'sicher' && again.doc.log.length === 1, 'saved again and reloaded');
+}
+
+// ---- every skill and module of Kapitel 2 exists; lessons point at real generators
+{
+  const W = load(['js/ui.js', 'js/draw.js', 'js/lessons.js'].filter(() => false)), BB = W.BB, M = BB.model;
+  ok(M.skillsOf('k2').length === 11 && M.MODULES.filter(m => m.unit === 'k2').map(m => m.id).join('') === 'IJKLMN', 'Kapitel 2: 11 skills, modules I–N');
+  M.MODULES.forEach(m => m.skills.forEach(sk => ok(M.skill(sk), 'module skill exists', [m.id, sk])));
+  ['nuroben', 'ungleich', 'addiert', 'kuerzerw', 'nichtvoll', 'faktor', 'nennergroesser', 'zaehlervgl', 'hnzaehler', 'zeichen', 'gleichordnen'].forEach(e => ok(M.ERRORS[e] && M.ERRORS[e].say, 'misconception tracked separately', e));
+}
+
+// ---- focus on Kapitel 2: Heute üben compares every day, exam = Klassenarbeit topic
+{
+  const { BB, pr } = fresh(); let k2 = 0, n = 0, cmpDays = 0;
+  for (let d = 0; d < 20; d++) {
+    const s = BB.session.create(pr, { mode: 'heute' }); let t, cmp = false;
+    while ((t = s.next())) { n++; if (BB.model.unitOf(t.skill) === 'k2') k2++; if (t.skill === 'vergleichen' || t.skill === 'gleichnamig') cmp = true; s.done(t, RIGHT); }
+    if (cmp) cmpDays++; s.finish();
+  }
+  ok(k2 / n >= 0.5, 'Heute üben: most tasks from the current chapter', [k2, n]);
+  ok(k2 / n <= 0.95, 'Heute üben: Kapitel 1 is still reviewed', [k2, n]);
+  ok(cmpDays === 20, 'every Heute round has a comparing / gleichnamig task', cmpDays);
+  const ex = BB.session.create(pr, { mode: 'pruefung' }); let t, gens = [];
+  while ((t = ex.next())) { gens.push(t.gen); ok(BB.model.unitOf(t.skill) === 'k2' && t.level >= 2, 'exam: Kapitel 2 at level ≥ 2', [t.gen, t.level]); ex.done(t, RIGHT); }
+  ok(gens.length === 12 && new Set(gens).size === 12, 'exam: 12 different Kapitel-2 tasks', gens);
+  ok(gens.indexOf('vergleich_schritte') >= 0 && gens.indexOf('ordnen') >= 0 && gens.indexOf('vgl_fehler') >= 0, 'exam includes comparing step by step, ordering, finding the mistake', gens);
+  pr.setSetting('focus', 'k1');
+  const ex1 = BB.session.create(pr, { mode: 'pruefung' }); const g1 = []; while ((t = ex1.next())) { g1.push(t.gen); ex1.done(t, RIGHT); }
+  ok(g1.join() === BB.session.EXAM.k1.join(), 'focus Kapitel 1 → the old exam', g1);
+  const h1 = BB.session.create(pr, { mode: 'heute' }); let warumSlot = null, i = 0; while ((t = h1.next())) { if (++i === 9) warumSlot = t.gen; h1.done(t, RIGHT); }
+  ok(warumSlot === 'warum', 'focus Kapitel 1 → slot 9 as before', warumSlot);
+}
+
+// ---- after a mistake: a similar task later in the same round (checks understanding), only twice per round
+{
+  const { BB, pr } = fresh();
+  const s = BB.session.create(pr, { mode: 'skill', skill: 'vergleichen' }); let t, n = 0, cb = 0, gensWrong = [], gensBack = [];
+  while ((t = s.next())) { if (t.followUp) { s.done(t, RIGHT); continue; } n++; if (t.checkBack) { cb++; gensBack.push(t.gen); } const r = n <= 3 ? WRONG_CORR : RIGHT; if (n <= 3 && !t.checkBack) gensWrong.push(t.gen); const o = s.done(t, r); }
+  ok(cb === 2 && n === 10, 'two check-back tasks added to the round', [cb, n]);
+  ok(gensBack.every(g => gensWrong.indexOf(g) >= 0), 'check-back = same kind of task', [gensWrong, gensBack]);
+  const ex = BB.session.create(pr, { mode: 'pruefung' }); let m = 0; while ((t = ex.next())) { m++; ex.done(t, WRONG_CORR); }
+  ok(m === 12, 'no check-back tasks in the exam', m);
+}
+
+// ---- bettermarks start weights: a little more at first, fading with his own data (no permanent label)
+{
+  const { BB, pr } = fresh();
+  ok(pr.weight('vergleichen') > pr.weight('erweitern') && pr.weight('tabelle') > pr.weight('erweitern'), 'comparing / tables start with more weight', [pr.weight('vergleichen'), pr.weight('erweitern')]);
+  for (let i = 0; i < 12; i++) { pr.record(BB.gens.make('vergleich_wahl', 1), RIGHT); pr.record(BB.gens.make('erw_mit', 1), RIGHT); }
+  ok(Math.abs(pr.weight('vergleichen') - pr.weight('erweitern')) < 1e-9, 'after 12 own tasks the start weight is gone', [pr.weight('vergleichen'), pr.weight('erweitern')]);
+  ok(pr.mastery('tabelle').key === 'neu', 'nothing is labelled weak from bettermarks alone');
+}
+
+// ---- coins: no farming with easy Kapitel-2 tasks
+{
+  const { BB, pr } = fresh();
+  for (let i = 0; i < 12; i++) pr.record(BB.gens.make('erw_mit', Math.min(3, pr.level('erweitern'))), RIGHT);
+  ok(pr.mastery('erweitern').key === 'sicher' && pr.level('erweitern') === 3, 'erweitern sicher at level 3');
+  ok(pr.taskCoins(BB.gens.make('erw_mit', 1), RIGHT) === 0 && pr.taskCoins(BB.gens.make('erw_mit', 3), RIGHT) === 1, 'easy tasks of a mastered Kapitel-2 skill pay nothing');
+  const s = BB.session.create(pr, { mode: 'skill', skill: 'ordnen' }); let t, coins = 0; while ((t = s.next())) { coins += s.done(t, RIGHT).coins; }
+  ok(coins >= 8 && coins <= 10, 'a normal round still pays', coins);
+}
+
+// ---- parent page sentences for the new misconceptions
+{
+  const { BB, pr } = fresh();
+  const t = BB.gens.make('kuerzen_mit', 1);
+  for (let i = 0; i < 4; i++) pr.record(t, Object.assign({}, WRONG_CORR, { err: 'nuroben' }));
+  for (let i = 0; i < 8; i++) pr.record(BB.gens.make('erw_mit', 1), RIGHT);
+  const mc = pr.misconceptions();
+  ok(mc.length === 1 && /nur der Zähler oder nur der Nenner/.test(mc[0].text) && /beim Kürzen/.test(mc[0].text), 'misconception sentence with context', mc);
+  const ov = pr.overview(); ok(ov.some(o => o.group === 'Brüche vergleichen') && ov.some(o => o.group === 'Erweitern & Kürzen'), 'parent page groups for Kapitel 2');
+}
+
+// ---- simulated learner, 21 days, Kapitel 2 in focus: comparing is hard at first
+{
+  const { BB, pr } = fresh();
+  const ability = { vergleichen: 0.35, gleichnamig: 0.45, ordnen: 0.4, vgl_warum: 0.45 }; const count = {};
+  for (let day = 0; day < 21; day++) {
+    const s = BB.session.create(pr, { mode: 'heute' }); let t;
+    while ((t = s.next())) { count[t.skill] = (count[t.skill] || 0) + 1; const a = Math.min(0.95, (ability[t.skill] || 0.8) + day * 0.03); s.done(t, Math.random() < a ? RIGHT : WRONG_CORR); }
+    s.finish();
+  }
+  const k2seen = BB.model.skillsOf('k2').filter(id => (pr.doc.skills[id] || {}).n);
+  ok(k2seen.length >= 10, 'three weeks: (almost) every Kapitel-2 skill practised', k2seen);
+  ok((count.vergleichen || 0) >= 20, 'comparing (weak at first) comes back very often', count.vergleichen);
+  ok((pr.doc.skills.vergleichen || {}).m > 0.55, 'mastery for comparing grows', (pr.doc.skills.vergleichen || {}).m);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

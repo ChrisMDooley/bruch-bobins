@@ -74,12 +74,13 @@
     BB.speech.stop();
     if (!r || r === 'home') return S.home(app);
     if (r === 'lernen') return S.lernen(app);
-    if (/^lernen\/[A-H]$/.test(r)) return BB.lessons.play(app, r.slice(-1));
+    if (/^lernen\/[A-N]$/.test(r)) return BB.lessons.play(app, r.slice(-1));
     if (r === 'ueben') return S.ueben(app);
     if (r === 'schnell') return S.schnell(app);
     if (/^start\//.test(r)) return start(r.slice(6));
     if (r === 'streifen') return S.streifen(app);
     if (r === 'werkstatt') return S.werkstatt(app);
+    if (r === 'labor') return S.labor(app);
     if (r === 'eltern') return S.parent(app);
     if (r === 'runde') return S.home(app);           // a reload during a round → start page
     S.home(app);

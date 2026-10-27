@@ -312,3 +312,105 @@ button, input, select { font: inherit; color: inherit; }
   .ws-ctrl .btn.small { padding: 4px 10px; min-height: 40px; }
   .ws-n { min-width: 3.2em; font-size: .85em; }
 }
+
+/* ---------------------------------------------------------------- Kapitel 2: Erweitern, Kürzen, Vergleichen */
+.unit { margin-top: 6px; }
+.unit + .unit { margin-top: 18px; }
+.unit-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .95em; margin: 4px 0 10px; color: var(--ink); }
+.tag.now { background: var(--accent-soft); color: var(--accent-ink); }
+.unit.focus .tiles.modules .tile:not(.done) { border-color: #F1C7B1; }
+
+/* a fraction written as a calculation: {2 · 4/3 · 4} */
+.fr-calc .fr-st { font-size: .8em; }
+.fr-calc .fr-n, .fr-calc .fr-d { white-space: nowrap; padding-left: .3em; padding-right: .3em; }
+
+/* pictures */
+.pic-wrap.pic-bars, .pic-wrap.pic-numline { width: 100%; }
+.pic-bars .pic { width: 100%; max-width: 560px; margin: 0 auto; }
+.pic-numline .pic { width: 100%; max-width: 640px; margin: 0 auto; }
+.lesson-pics > .pic-bars, .lesson-pics > .pic-numline { align-self: stretch; }
+.pic-row { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 18px; }
+.pic-row .pic { max-width: 200px; }
+.opt .pic-bars .pic { max-height: none; max-width: 260px; }
+.lab-tap { cursor: pointer; }
+
+/* missing number: {2/3} = ?/12 */
+.ans-frac.with-before { gap: 10px; }
+.ans-frac .before { font-size: 1.5em; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.nbox.given { background: #F7F1E8; border-color: #E2D3C0; color: var(--ink); }
+
+/* < > = */
+.ans-choice.signs { grid-template-columns: repeat(3, minmax(70px, 110px)); }
+.ans-choice.signs .opt { align-items: center; font-size: 2em; line-height: 1; min-height: 70px; justify-content: center; }
+
+/* tables */
+.ftable-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+.ftable { border-collapse: separate; border-spacing: 0; margin: 4px 0; }
+.ftable th, .ftable td { border: 2px solid var(--line); padding: 8px 10px; text-align: center; vertical-align: middle; background: var(--surface); }
+.ftable thead th { background: #FFF6EE; font-size: 1.05em; white-space: nowrap; }
+.ftable thead th.vol { font-size: .85em; }
+.ftable .tstart { background: #FFF6EE; font-size: 1.2em; }
+.ftable .tgiven { font-size: 1.15em; }
+.ftable tr:first-child th:first-child { border-top-left-radius: 14px; }
+.ftable tr:first-child th:last-child { border-top-right-radius: 14px; }
+.tbox { gap: 4px; padding: 2px; border-radius: 12px; }
+.tbox .fline { width: 2.6em; }
+.nbox.tn { width: 2.6em; height: 2em; font-size: 1.15em; }
+.thead-in { display: inline-flex; align-items: center; gap: 4px; padding: 2px; border-radius: 10px; }
+.tbox.bad, .thead-in.bad { box-shadow: 0 0 0 3px var(--no); background: var(--no-soft); }
+
+/* ordering cards */
+.ans-order { display: flex; flex-direction: column; gap: 10px; }
+.ord-ends { display: flex; justify-content: space-between; color: var(--ink-soft); font-size: .85em; font-weight: 700; padding: 0 4px; }
+.ord-row { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 10px; background: #FFF8EC; border: 2px dashed #E8CFAE; border-radius: 16px; min-height: 92px; }
+.ord-slot { flex: 1 1 64px; min-width: 64px; max-width: 120px; min-height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: rgba(255,255,255,.6); }
+.ord-slot.bad { box-shadow: 0 0 0 3px var(--no); }
+.ord-empty { color: #C9B49A; font-weight: 700; }
+.ord-pool { display: flex; flex-wrap: wrap; gap: 8px; min-height: 74px; }
+.ord-note { margin: 0; }
+.ord-card { min-width: 64px; min-height: 70px; padding: 6px 12px; border-radius: 12px; border: 2px solid var(--blue); background: var(--surface); font-size: 1.35em; font-weight: 700; cursor: pointer; touch-action: manipulation; box-shadow: 0 3px 0 rgba(47,109,181,.25); }
+.ord-card.placed { border-color: var(--good); box-shadow: 0 3px 0 rgba(47,143,91,.25); }
+.ord-card:disabled { cursor: default; }
+.ord-help { margin-top: 4px; }
+
+/* picture help on a wrong answer */
+.fb-demo { margin-top: 10px; }
+.demo-btn { margin-top: 8px; display: inline-flex; align-items: center; width: auto; align-self: flex-start; }
+
+/* worked examples, one step at a time */
+.walk-lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.walk-lines li { padding: 4px 0 4px 12px; border-left: 4px solid transparent; font-size: 1.1em; }
+.walk-lines li.now { border-left-color: var(--accent); }
+.walk-lines li.done { color: var(--ink-soft); }
+.walk-lines li.now { font-weight: 700; animation: walkin .25s ease-out; }
+@keyframes walkin { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .walk-lines li.now { animation: none; } }
+
+/* Streifentafel: compare mode + number line */
+.st-line.b { background: var(--blue); }
+.st-row.match-b .st-name { color: var(--blue); }
+.st-cmp.on { background: var(--blue-soft); border-color: var(--blue); }
+.st-numline:empty { display: none; }
+
+/* Bruch-Labor */
+.bruch-labor { display: flex; flex-direction: column; gap: 12px; }
+.lab-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.lab-pane { display: flex; flex-direction: column; gap: 12px; }
+.lab-two { flex-direction: row; flex-wrap: wrap; gap: 18px; }
+.lab-frac { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 14px; border: 2px solid var(--line); }
+.lab-frac.a { border-color: #F1C7B1; } .lab-frac.b { border-color: #B9D1EE; }
+.lab-chain { font-size: 1.35em; font-weight: 700; margin: 0; }
+.lab-step, .lab-msg { margin: 0; padding: 8px 12px; background: #FFF6EE; border-radius: 12px; }
+.lab-msg { font-weight: 700; }
+.lab-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lab-lab { font-weight: 700; color: var(--ink-soft); font-size: .9em; min-width: 12em; }
+
+@media (max-width: 560px) {
+  .ans-frac .before { font-size: 1.3em; }
+  .ftable th, .ftable td { padding: 5px 4px; }
+  .nbox.tn { width: 2.3em; font-size: 1.05em; }
+  .ord-card { font-size: 1.2em; min-width: 56px; padding: 6px 8px; }
+  .ord-slot { min-width: 56px; flex-basis: 56px; }
+  .lab-lab { min-width: 0; width: 100%; }
+  .ans-choice.signs { grid-template-columns: repeat(3, 1fr); }
+}

@@ -4,6 +4,10 @@
  *   BB.draw.render(spec, { interactive, onChange }) → element with .value() (e.g. {count}) for answers
  *
  * spec.type: pie · bar · tri · wholes · unequal · items · share · jug
+ *            bars    equal-width strips, one per fraction: {rows:[{n, d, sub, col, label}], lines, labels}
+ *                    sub = every piece cut again into sub parts (dashed) → shows Erweitern / gleichnamig machen
+ *            numline number line 0 … max: {max, ticks:[d, …], marks:[{n, d, col, below}], point:{n, d}}
+ *            row     several pictures side by side: {items:[spec, …]}
  */
 (function (root) {
   'use strict';
@@ -146,6 +150,14 @@
         if (isPie2) drawPie(el('g', {}, g), x2 + 55, y2 + 57, 44, 1, function () { return false; }, set, kind);
         else drawBar(el('g', {}, g), x2 + 8, y2 + 8, w2 - 16, h2 - 16, kind === 'schokolade' ? 2 : 1, kind === 'schokolade' ? 4 : 1, function () { return false; }, set, kind);
       }
+    } else if (spec.type === 'bars') {
+      return barsPic(spec);
+    } else if (spec.type === 'numline') {
+      return numline(spec);
+    } else if (spec.type === 'row') {
+      wrap.className = 'pic-wrap pic-row';
+      spec.items.forEach(function (it) { wrap.appendChild(render(it)); });
+      return wrap;
     } else if (spec.type === 'share') {
       return shareView(spec);
     } else if (spec.type === 'jug') {
@@ -226,7 +238,79 @@
     return wrap;
   }
 
+  // ---------------------------------------------------------------- strips & number line (Kapitel 2)
+  var BARCOL = [{ on: '#E0673B', line: '#A8492A' }, { on: '#4C83C7', line: '#2F5E95' }, { on: '#2F8F5B', line: '#226B44' }, { on: '#8E5BB5', line: '#6B4290' }];
+  // a fraction written stacked inside an SVG (n over a bar over d), centred on x
+  function svgFrac(g, x, y, n, d, col, size) {
+    size = size || 17;
+    var t1 = el('text', { x: x, y: y, 'text-anchor': 'middle', 'font-size': size, 'font-weight': 700, fill: col || '#2A2530' }, g); t1.textContent = n;
+    var w = Math.max(String(n).length, String(d).length) * size * 0.62 + 6;
+    el('line', { x1: x - w / 2, x2: x + w / 2, y1: y + 5, y2: y + 5, stroke: col || '#2A2530', 'stroke-width': 2 }, g);
+    var t2 = el('text', { x: x, y: y + 5 + size, 'text-anchor': 'middle', 'font-size': size, 'font-weight': 700, fill: col || '#2A2530' }, g); t2.textContent = d;
+  }
+  function barsPic(spec) {
+    var wrap = document.createElement('div'); wrap.className = 'pic-wrap pic-bars';
+    var rows = spec.rows, W = Math.max(1, Math.ceil(Math.max.apply(null, rows.map(function (r) { return r.n / r.d; })) - 1e-9));
+    var showLab = spec.labels !== false, labW = showLab ? 74 : 0, compact = rows.length === 1 && !showLab, unit = compact ? 230 : W > 1 ? 250 : 420, RH = 46, GAP = 18;
+    var width = labW + W * unit + 14, height = rows.length * (RH + GAP) - GAP + 12 + (W > 1 ? 22 : 0);
+    var s = svg(width, height, 'bars'), x0 = labW + 7, desc = [];
+    rows.forEach(function (r, i) {
+      var y = 6 + i * (RH + GAP), C = BARCOL[(r.col || 0) % BARCOL.length], cw = unit / r.d, g = el('g', {}, s);
+      for (var w = 0; w < W; w++) {
+        for (var j = 0; j < r.d; j++) {
+          var idx = w * r.d + j, on = idx < r.n, x = x0 + w * unit + j * cw;
+          el('rect', { x: x, y: y, width: cw, height: RH, fill: on ? C.on : '#FFFFFF', stroke: C.line, 'stroke-width': 2 }, g);
+          for (var k = 1; k < (r.sub || 1); k++) el('line', { x1: x + k * cw / r.sub, x2: x + k * cw / r.sub, y1: y + 2, y2: y + RH - 2, stroke: on ? 'rgba(255,255,255,.9)' : C.line, 'stroke-width': 1.3, 'stroke-dasharray': '4 3' }, g);
+        }
+        el('rect', { x: x0 + w * unit, y: y, width: unit, height: RH, fill: 'none', stroke: '#2A2530', 'stroke-width': 2.5, rx: 2 }, g);
+      }
+      if (showLab && (spec.labels !== 'some' || r.label)) svgFrac(g, labW / 2 - 2, y + 18, r.n, r.d, C.line, 20);
+      desc.push(r.n + ' von ' + r.d * W + (r.sub > 1 ? ' (jedes Stück in ' + r.sub + ' geteilt)' : ''));
+    });
+    if (W > 1) for (var t = 0; t <= W; t++) { var tx = el('text', { x: x0 + t * unit, y: height - 4, 'text-anchor': 'middle', 'font-size': 15, fill: '#2A2530' }, s); tx.textContent = t; }
+    if (spec.lines) {
+      var seen = {};
+      rows.forEach(function (r) {
+        var key = r.n * 100000 / r.d; if (seen[key]) return; seen[key] = 1;
+        var xx = x0 + r.n / r.d * unit;
+        el('line', { x1: xx, x2: xx, y1: 1, y2: rows.length * (RH + GAP) - GAP + 11, stroke: '#2A2530', 'stroke-width': 2.5, 'stroke-dasharray': '7 5' }, s);
+      });
+    }
+    s.setAttribute('aria-label', 'Streifen: ' + desc.join('; '));
+    wrap.appendChild(s);
+    return wrap;
+  }
+  function numline(spec) {
+    var wrap = document.createElement('div'); wrap.className = 'pic-wrap pic-numline';
+    var max = spec.max || 1, marks = spec.marks || [], W = 640, x0 = 34, x1 = W - 34, len = x1 - x0;
+    var hasBelow = marks.some(function (m) { return m.below; }), y = hasBelow || (spec.ticks || []).length > 1 ? 78 : 72, H = y + (hasBelow ? 78 : 44);
+    var s = svg(W, H, 'numline');
+    function X(v) { return x0 + v / max * len; }
+    el('line', { x1: x0 - 8, x2: x1 + 18, y1: y, y2: y, stroke: '#2A2530', 'stroke-width': 3 }, s);
+    el('path', { d: 'M' + (x1 + 22) + ',' + y + ' l-11,-6 v12 Z', fill: '#2A2530' }, s);
+    (spec.ticks || []).forEach(function (d, ti) {
+      for (var i = 1; i < d * max; i++) if (i % d) {
+        var x = X(i / d), up = ti === 0;
+        el('line', { x1: x, x2: x, y1: up ? y - 14 : y, y2: up ? y : y + 12, stroke: ti === 0 ? '#2F5E95' : '#A8492A', 'stroke-width': up ? 3 : 2.2 }, s);
+      }
+    });
+    for (var w = 0; w <= max; w++) {
+      el('line', { x1: X(w), x2: X(w), y1: y - 16, y2: y + 16, stroke: '#2A2530', 'stroke-width': 3 }, s);
+      var tl = el('text', { x: X(w), y: y + (hasBelow ? 36 : 38), 'text-anchor': 'middle', 'font-size': 19, 'font-weight': 700, fill: '#2A2530' }, s); tl.textContent = w;
+    }
+    marks.forEach(function (m) {
+      var C = BARCOL[(m.col || 0) % BARCOL.length], x = X(m.n / m.d);
+      el('circle', { cx: x, cy: y, r: 7.5, fill: C.on, stroke: '#fff', 'stroke-width': 2 }, s);
+      if (m.below) svgFrac(s, x, y + 38 + (hasBelow ? 8 : 0), m.n, m.d, C.line, 15);
+      else svgFrac(s, x, y - 44, m.n, m.d, C.line, 15);
+    });
+    if (spec.point) { var px = X(spec.point.n / spec.point.d); el('circle', { cx: px, cy: y, r: 10, fill: '#E0673B', stroke: '#fff', 'stroke-width': 3 }, s); el('path', { d: 'M' + px + ',' + (y - 16) + ' l-7,-12 h14 Z', fill: '#E0673B' }, s); }
+    s.setAttribute('aria-label', 'Zahlenstrahl von 0 bis ' + max + (spec.ticks && spec.ticks.length ? ', eingeteilt in ' + spec.ticks.map(function (d) { return root.BB.text.denomWord(d); }).join(' und ') : '') + (marks.length ? ', markiert: ' + marks.map(function (m) { return m.n + '/' + m.d; }).join(', ') : ''));
+    wrap.appendChild(s);
+    return wrap;
+  }
+
   function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  root.BB.draw = { render: render, PAL: PAL, KIDS: KIDS, PIE_KINDS: PIE_KINDS, svg: svg, el: el, wedge: wedge, drawPie: drawPie, drawBar: drawBar, pieceSet: pieceSet, pal: pal };
+  root.BB.draw = { render: render, svgFrac: svgFrac, BARCOL: BARCOL, PAL: PAL, KIDS: KIDS, PIE_KINDS: PIE_KINDS, svg: svg, el: el, wedge: wedge, drawPie: drawPie, drawBar: drawBar, pieceSet: pieceSet, pal: pal };
 })(typeof window !== 'undefined' ? window : globalThis);

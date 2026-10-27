@@ -10,7 +10,8 @@
   'use strict';
   var BB = root.BB, U = BB.ui, h = U.h, T = BB.text, W = BB.widgets, D = BB.draw, M = BB.model;
   var PRAISE = ['Richtig!', 'Genau!', 'Super!', 'Stimmt!', 'Klasse!', 'Sehr gut!'];
-  var STRIP_SKILLS = { zn: 1, erkennen: 1, zeichnen: 1, echt: 1, u2g: 1, g2u: 1, division: 1, verteilen: 1, einheiten: 1, liter: 1, kg: 1 };
+  var STRIP_SKILLS = { zn: 1, erkennen: 1, zeichnen: 1, echt: 1, u2g: 1, g2u: 1, division: 1, verteilen: 1, einheiten: 1, liter: 1, kg: 1,
+                       gleichwertig: 1, zielnenner: 1, tabelle: 1, kuerzen: 1, vollstaendig: 1 };
 
   function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
   function fmt(s) { var m = Math.floor(s / 60), x = s % 60; return m + ':' + (x < 10 ? '0' : '') + x; }
@@ -31,6 +32,7 @@
       if (!t) return end();
       count.textContent = session.limit ? 'Aufgabe ' + Math.min(t.no, session.limit + (t.followUp ? 1 : 0)) + (t.followUp ? '' : ' von ' + session.limit) : '';
       if (t.followUp) count.textContent = 'Warum stimmt das?';
+      if (t.checkBack) count.textContent = 'Noch einmal – eine ähnliche Aufgabe';
       show(t);
     }
 
@@ -41,7 +43,8 @@
       var card = h('article', { class: 'task card', 'data-gen': t.gen, 'data-skill': t.skill });
       var promptEl = h('h2', { class: 'prompt', rich: t.prompt });
       var tools = h('div', { class: 'task-tools' }, [U.readButton(function () { return t.prompt + (t.sub ? '. ' + t.sub : ''); }),
-        !exam && STRIP_SKILLS[t.skill] ? h('button', { class: 'btn soft', type: 'button', text: '📏 Streifentafel', onclick: function () { BB.strips.help(stripDen(t)); } }) : null]);
+        !exam && STRIP_SKILLS[t.skill] ? h('button', { class: 'btn soft', type: 'button', text: '📏 Streifentafel', onclick: function () { BB.strips.help(stripDen(t)); } }) : null,
+        !exam && t.lab && BB.lab ? h('button', { class: 'btn soft', type: 'button', text: '🔬 Bruch-Labor', onclick: function () { BB.lab.help(t.lab); } }) : null]);
       card.appendChild(h('div', { class: 'task-top' }, [promptEl, tools]));
       if (t.sub) card.appendChild(h('p', { class: 'sub', rich: t.sub }));
       if (t.visual) card.appendChild(D.render(t.visual));
@@ -91,8 +94,16 @@
           return finish(true, r);
         }
         wrongs++; if (!firstErr) firstErr = r.err || 'other';
-        if (widget.markWrong) widget.markWrong();
+        if (widget.markWrong) widget.markWrong(r);
         var box = h('div', { class: 'fb-box no' }, [h('p', { class: 'fb-main', rich: r.msg || 'Das stimmt noch nicht.' })]);
+        var demo = r.demo || t.demo;
+        if (demo) {
+          var pic = h('div', { class: 'fb-demo', hidden: true });
+          box.appendChild(h('button', { class: 'btn soft small demo-btn', type: 'button', text: '👀 Zeig es mir im Bild', onclick: function (e) {
+            if (!pic.firstChild) pic.appendChild(D.render(demo));
+            pic.hidden = !pic.hidden; e.target.textContent = pic.hidden ? '👀 Zeig es mir im Bild' : 'Bild ausblenden'; } }));
+          box.appendChild(pic);
+        }
         if (wrongs >= 2 && hintLevel < 4) box.appendChild(h('p', { class: 'fb-sub', text: 'Tipp: Nimm „💡 Hilf mir“ – Schritt für Schritt.' }));
         box.appendChild(h('p', { class: 'fb-sub', text: 'Versuch es noch einmal.' }));
         fb.appendChild(box);

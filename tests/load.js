@@ -1,7 +1,7 @@
 // Loads the app's logic files (no DOM) into one shared context for node tests.
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
-const FILES = ['js/frac.js', 'js/text.js', 'js/model.js', 'js/ctx.js', 'js/gens-core.js', 'js/gens-world.js', 'js/gens-why.js', 'js/progress.js', 'js/session.js'];
+const FILES = ['js/frac.js', 'js/text.js', 'js/model.js', 'js/ctx.js', 'js/gens-core.js', 'js/gens-world.js', 'js/gens-k2.js', 'js/gens-why.js', 'js/progress.js', 'js/session.js'];
 module.exports = function load(extra) {
   const store = {};
   const ctx = { console, Math, Date, JSON, Object, Array, String, Number, Error, isNaN, isFinite, parseInt, parseFloat,

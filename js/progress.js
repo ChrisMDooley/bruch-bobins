@@ -37,7 +37,7 @@
   P.blank = function () {
     return { v: 1, created: now(), skills: {}, log: [], wrong: [], modules: {}, sessions: [],
              coins: { log: [], days: {}, mastery: {}, modules: {} },
-             settings: { goalDate: DEFAULT_GOAL, goalLabel: 'Schulbeginn', timer: false, font: '', voice: '', slowRate: 0.8 } };
+             settings: { goalDate: DEFAULT_GOAL, goalLabel: 'Schulbeginn', timer: false, font: '', voice: '', slowRate: 0.8, focus: 'k2' } };
   };
   P.load = function () {
     var d = null;
@@ -123,8 +123,10 @@
   P.weight = function (id, t) {
     t = t || now();
     var s = this.doc.skills[id];
-    if (!s || !s.n) return 1.2;                                 // not tried yet
-    var w = 0.25 + (1 - s.m) * 2;
+    var pri = M.PRIORITY[id] || 1, n = s ? s.n : 0;
+    pri = 1 + (pri - 1) * Math.max(0, 1 - n / 12);               // bettermarks start weight fades with his own data
+    if (!s || !s.n) return 1.2 * pri;                           // not tried yet
+    var w = (0.25 + (1 - s.m) * 2) * pri;
     if (s.due <= t) w += 0.8;
     var recentErr = 0; for (var e in s.errs) recentErr += s.errs[e];
     w += Math.min(0.6, recentErr / Math.max(8, s.n) );
@@ -143,6 +145,8 @@
       var E = M.ERRORS[e] || M.ERRORS.other, sentence = E.say, c = ctx[e];
       var world = (c.verteilen || 0) + (c.sach || 0) + (c.einheiten || 0);
       if (e === 'swap' && world >= counts[e] / 2) sentence += ' – vor allem bei Sachaufgaben';
+      if ((e === 'nuroben' || e === 'addiert') && (c.kuerzen || 0) + (c.vollstaendig || 0) >= counts[e] / 2) sentence += ' – vor allem beim Kürzen';
+      else if ((e === 'nuroben' || e === 'addiert') && (c.erweitern || 0) + (c.zielnenner || 0) + (c.tabelle || 0) >= counts[e] / 2) sentence += ' – vor allem beim Erweitern';
       var often = counts[e] >= 6 ? 'häufig' : 'gelegentlich';
       out.push({ err: e, n: counts[e], text: sentence.replace('gelegentlich', often).replace('manchmal', often) + '.' });
     });

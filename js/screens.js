@@ -10,7 +10,7 @@
     { id: 'schnell',  icon: '⚡', title: 'Schnelltraining',   sub: '8 kurze Aufgaben' },
     { id: 'sach',     icon: '🌍', title: 'Sachaufgaben',      sub: 'Pizza, Geld, Liter, Kilometer …' },
     { id: 'bild',     icon: '🖼️', title: 'Bildtraining',      sub: 'Brüche sehen und markieren' },
-    { id: 'pruefung', icon: '📝', title: 'Prüfungstraining',  sub: '12 gemischte Aufgaben, Hilfe erst danach' },
+    { id: 'pruefung', icon: '📝', title: 'Prüfungstraining',  sub: '12 Aufgaben wie in der Klassenarbeit, Hilfe erst danach' },
     { id: 'fehler',   icon: '🎯', title: 'Fehlertraining',    sub: 'Deine Fehler – jetzt richtig' }
   ];
 
@@ -19,23 +19,25 @@
     var today = pr.todayCount(), wrongN = pr.doc.wrong.length;
     var countdown = days == null ? '' : days > 1 ? 'Noch ' + days + ' Tage bis ' + goalPhrase(st) + '.' : days === 1 ? 'Morgen ist ' + st.goalLabel + '!' : days === 0 ? 'Heute ist ' + st.goalLabel + ' – viel Erfolg!' : '';
     var line = today ? 'Heute schon ' + today + (today === 1 ? ' Aufgabe' : ' Aufgaben') + ' geschafft. Stark!' : 'Für heute: ca. 10–15 Minuten.';
-    var v = h('section', { class: 'home' }, [
+    var v = h('section', { class: 'home' }, [].concat([
       h('div', { class: 'hero' }, [app.robin(today ? 'happy' : 'normal', 92), h('div', {}, [
         h('h1', { text: 'Hallo ' + P.childName + '!' }),
         countdown ? h('p', { class: 'countdown', text: '📅 ' + countdown }) : null,
         h('p', { class: 'hero-line', text: line })])]),
       h('button', { class: 'today-btn', type: 'button', 'data-menu': 'heute', onclick: function () { app.start('heute'); } }, [
         h('span', { class: 'tb-icon', text: '▶' }),
-        h('span', { class: 'tb-text' }, [h('span', { class: 'tb-title', text: 'Heute üben' }), h('span', { class: 'tb-sub', text: '10 Aufgaben: Wiederholen · Bilder · Umwandeln · Sachaufgaben · Warum?' })])]),
+        h('span', { class: 'tb-text' }, [h('span', { class: 'tb-title', text: 'Heute üben' }), h('span', { class: 'tb-sub', text: st.focus === 'k1' ? '10 Aufgaben: Wiederholen · Bilder · Umwandeln · Sachaufgaben · Warum?' : '10 Aufgaben: Wiederholen · Bilder · Erweitern & Kürzen · Vergleichen · Warum?' })])]),
       wrongN >= 3 ? h('button', { class: 'problem-card', type: 'button', 'data-menu': 'fehler-card', onclick: function () { app.start('fehler'); } }, [
         h('span', { class: 'pc-icon', text: '🎯' }), h('span', {}, [h('b', { text: 'Fehlertraining' }), h('span', { class: 'note', text: ' – ' + wrongN + ' Aufgaben, die du jetzt verbessern kannst' })])]) : null,
-      h('h2', { class: 'group-h', text: '📘 Lernen' }),
-      h('div', { class: 'tiles modules' }, M.MODULES.map(function (m) {
-        var done = pr.moduleDone(m.id), mast = m.skills.map(function (s) { var x = pr.doc.skills[s] || {}; return (x.m || 0) * Math.min(1, (x.n || 0) / 8); }), avg = mast.reduce(function (a, b) { return a + b; }, 0) / mast.length;
-        return h('button', { class: 'tile module' + (done ? ' done' : ''), type: 'button', 'data-module': m.id, onclick: function () { app.go('lernen/' + m.id); } }, [
-          h('span', { class: 'tile-icon', text: m.icon }), h('span', { class: 'tile-title', text: m.id + ' · ' + m.title }),
-          h('span', { class: 'tile-sub' }, [done ? h('span', { class: 'tag ok', text: '✓ gelernt' }) : h('span', { class: 'tag', text: 'neu' }), U.bar(avg)])]);
-      })),
+      h('h2', { class: 'group-h', text: '📘 Lernen' })].concat(unitOrder(st).map(function (u) {
+        return h('div', { class: 'unit' + (u === st.focus ? ' focus' : ''), 'data-unit': u }, [h('h3', { class: 'unit-h' }, [h('span', { text: M.UNITS[u].title }), u === st.focus ? h('span', { class: 'tag now', text: 'aktuell' }) : null]),
+          h('div', { class: 'tiles modules' }, M.MODULES.filter(function (m) { return m.unit === u; }).map(function (m) {
+          var done = pr.moduleDone(m.id), mast = m.skills.map(function (s) { var x = pr.doc.skills[s] || {}; return (x.m || 0) * Math.min(1, (x.n || 0) / 8); }), avg = mast.reduce(function (a, b) { return a + b; }, 0) / mast.length;
+          return h('button', { class: 'tile module' + (done ? ' done' : ''), type: 'button', 'data-module': m.id, onclick: function () { app.go('lernen/' + m.id); } }, [
+            h('span', { class: 'tile-icon', text: m.icon }), h('span', { class: 'tile-title', text: m.id + ' · ' + m.title }),
+            h('span', { class: 'tile-sub' }, [done ? h('span', { class: 'tag ok', text: '✓ gelernt' }) : h('span', { class: 'tag', text: 'neu' }), U.bar(avg)])]);
+        }))]);
+      })).concat([
       h('h2', { class: 'group-h', text: '✏️ Üben' }),
       h('div', { class: 'tiles' }, MODES.map(function (m) {
         return h('button', { class: 'tile', type: 'button', 'data-menu': m.id, onclick: function () { app.go(m.id === 'ueben' ? 'ueben' : m.id === 'schnell' ? 'schnell' : 'start/' + m.id); } }, [
@@ -44,25 +46,36 @@
       h('h2', { class: 'group-h', text: '🧰 Werkzeuge' }),
       h('div', { class: 'tiles' }, [
         h('button', { class: 'tile', type: 'button', 'data-menu': 'streifen', onclick: function () { app.go('streifen'); } }, [h('span', { class: 'tile-icon', text: '📏' }), h('span', { class: 'tile-title', text: 'Streifentafel' }), h('span', { class: 'tile-sub', text: 'Welche Brüche sind gleich groß?' })]),
+        h('button', { class: 'tile', type: 'button', 'data-menu': 'labor', onclick: function () { app.go('labor'); } }, [h('span', { class: 'tile-icon', text: '🔬' }), h('span', { class: 'tile-title', text: 'Bruch-Labor' }), h('span', { class: 'tile-sub', text: 'Erweitern, kürzen, vergleichen – zum Ausprobieren' })]),
         h('button', { class: 'tile', type: 'button', 'data-menu': 'werkstatt', onclick: function () { app.go('werkstatt'); } }, [h('span', { class: 'tile-icon', text: '✂️' }), h('span', { class: 'tile-title', text: 'Verteil-Werkstatt' }), h('span', { class: 'tile-sub', text: 'Pizzen, Kuchen, Schokolade gerecht schneiden' })])])
-    ]);
+    ])));
     app.setView(v);
   }
+  // the chapter taught now comes first
+  function unitOrder(st) { return st.focus === 'k1' ? ['k1', 'k2'] : ['k2', 'k1']; }
   function goalPhrase(st) { return st.goalLabel === 'Schulbeginn' ? 'zum Schulbeginn' : 'zur ' + st.goalLabel; }
 
   function lernen(app) {
-    var pr = app.progress;
-    app.setView(h('section', { class: 'menu' }, [h('h1', { class: 'screen-h', text: '📘 Lernen' }), h('p', { class: 'screen-sub', text: 'Jedes Modul: Erklärung, Beispiel, eine Aufgabe mit Robin – dann du.' }),
-      h('div', { class: 'list' }, M.MODULES.map(function (m) {
+    var pr = app.progress, st = pr.settings();
+    app.setView(h('section', { class: 'menu' }, [h('h1', { class: 'screen-h', text: '📘 Lernen' }), h('p', { class: 'screen-sub', text: 'Jedes Modul: Erklärung, Beispiel, eine Aufgabe mit Robin – dann du.' })].concat(unitOrder(st).map(function (u) {
+      return h('div', {}, [h('h2', { class: 'group-h', text: M.UNITS[u].title }), h('div', { class: 'list' }, M.MODULES.filter(function (m) { return m.unit === u; }).map(function (m) {
         return h('button', { class: 'list-item', type: 'button', 'data-module': m.id, onclick: function () { app.go('lernen/' + m.id); } }, [h('span', { class: 'li-icon', text: m.icon }),
           h('span', { class: 'li-text' }, [h('b', { text: m.id + ' · ' + m.title }), h('span', { class: 'note', text: m.skills.map(function (s) { return M.skill(s).label; }).join(' · ') })]),
           pr.moduleDone(m.id) ? h('span', { class: 'tag ok', text: '✓' }) : null]);
-      }))]), { back: true });
+      }))]);
+    }))), { back: true });
+  }
+
+  function labor(app) {
+    app.setView(h('section', { class: 'menu' }, [h('h1', { class: 'screen-h', text: '🔬 Bruch-Labor' }),
+      h('p', { class: 'screen-sub', rich: 'Probiere aus: Schneide die Stücke feiner (*erweitern*) oder lege sie zusammen (*kürzen*) – und vergleiche zwei Brüche, indem du gleich große Stücke machst.' }),
+      BB.lab.tool({})]), { back: true });
   }
 
   function ueben(app) {
-    var pr = app.progress, groups = {};
-    pr.overview().forEach(function (o) { (groups[o.group] = groups[o.group] || []).push(o); });
+    var pr = app.progress, groups = {}, focus = pr.settings().focus;
+    pr.overview().filter(function (o) { return focus === 'alle' || M.unitOf(o.id) === focus; }).concat(pr.overview().filter(function (o) { return focus !== 'alle' && M.unitOf(o.id) !== focus; }))
+      .forEach(function (o) { (groups[o.group] = groups[o.group] || []).push(o); });
     var v = h('section', { class: 'menu' }, [h('h1', { class: 'screen-h', text: '🔁 Üben' }),
       h('button', { class: 'today-btn small', type: 'button', 'data-menu': 'gemischt', onclick: function () { app.start('ueben'); } }, [h('span', { class: 'tb-icon', text: '🎲' }),
         h('span', { class: 'tb-text' }, [h('span', { class: 'tb-title', text: 'Gemischt' }), h('span', { class: 'tb-sub', text: 'Robin wählt, was du gerade brauchst' })])])]);
@@ -132,7 +145,8 @@
         h('div', { class: 'row' }, [inp, h('button', { class: 'btn primary', type: 'button', text: 'Öffnen', onclick: go })]), m]), { back: true });
       return setTimeout(function () { inp.focus(); }, 30);
     }
-    var s = pr.stats(), st = pr.settings(), mc = pr.misconceptions(), recent = pr.recent(7), ov = pr.overview();
+    var s = pr.stats(), st = pr.settings(), mc = pr.misconceptions(), recent = pr.recent(7), ov0 = pr.overview();
+    var ov = st.focus === 'k1' || st.focus === 'alle' ? ov0 : ov0.filter(function (o) { return M.unitOf(o.id) === 'k2'; }).concat(ov0.filter(function (o) { return M.unitOf(o.id) !== 'k2'; }));
     var statRow = function (label, val) { return h('div', { class: 'pstat' }, [h('b', { text: val }), h('span', { text: label })]); };
     var groups = {}; ov.forEach(function (o) { (groups[o.group] = groups[o.group] || []).push(o); });
     var mastery = h('div', { class: 'mastery' });
@@ -153,6 +167,8 @@
     goal.addEventListener('change', function () { pr.setSetting('goalDate', goal.value); });
     var goalLab = h('select', { 'aria-label': 'Was ist an dem Tag?' }, ['Schulbeginn', 'Klassenarbeit', 'Lernkontrolle', 'Test'].map(function (x) { var o = h('option', { value: x, text: x }); if (x === st.goalLabel) o.selected = true; return o; }));
     goalLab.addEventListener('change', function () { pr.setSetting('goalLabel', goalLab.value); });
+    var focusSel = h('select', { 'aria-label': 'Schwerpunkt' }, [['k2', M.UNITS.k2.short], ['k1', M.UNITS.k1.short], ['alle', 'beide gleich']].map(function (x) { var o = h('option', { value: x[0], text: x[1] }); if (x[0] === (st.focus || 'k2')) o.selected = true; return o; }));
+    focusSel.addEventListener('change', function () { pr.setSetting('focus', focusSel.value); });
     var font = h('input', { type: 'checkbox' }); font.checked = st.font === 'dyslexic';
     font.addEventListener('change', function () { pr.setSetting('font', font.checked ? 'dyslexic' : ''); app.applySettings(); });
     var rate = h('select', { 'aria-label': 'Vorlesetempo' }, [['0.65', 'langsam'], ['0.8', 'ruhig'], ['1', 'normal']].map(function (x) { var o = h('option', { value: x[0], text: x[1] }); if (String(st.slowRate) === x[0]) o.selected = true; return o; }));
@@ -168,12 +184,15 @@
         statRow('Tage in Folge', String(s.streak)), statRow('Robin-Münzen hier verdient', String(s.coins))]),
         h('p', { class: 'note', text: '„Gleich richtig“ = beim ersten Versuch ohne Tipp. Bei wenigen Aufgaben sind die Zahlen noch wenig aussagekräftig.' })]),
       h('div', { class: 'card' }, [h('h2', { text: 'Stand nach Thema' }), mastery,
-        h('p', { class: 'note', text: '„Sicher“ erst nach mindestens 8 Aufgaben, mit zuletzt fast nur Treffern auf mittlerer oder höherer Stufe.' })]),
+        h('p', { class: 'note', text: '„Sicher“ erst nach mindestens 8 Aufgaben, mit zuletzt fast nur Treffern auf mittlerer oder höherer Stufe.' }),
+        h('p', { class: 'note', text: 'Kapitel 2 startet nach den bettermarks-Ergebnissen vom 26.10.: Tabellen erweitern, auf vorgegebenen Nenner/Zähler kürzen und vor allem Vergleichen und Begründen kommen anfangs etwas öfter. Das gleicht sich mit Lukas’ eigenen Ergebnissen hier schnell aus – nichts wird dauerhaft als Schwäche eingestuft.' })]),
       h('div', { class: 'card' }, [h('h2', { text: 'Wiederkehrende Fehler' }),
         mc.length ? h('ul', { class: 'mc' }, mc.map(function (x) { return h('li', { text: x.text }); })) : h('p', { class: 'note', text: s.tasks < 10 ? 'Noch zu wenige Aufgaben für eine Aussage.' : 'Keine wiederkehrenden Fehler – prima.' })]),
       h('div', { class: 'card' }, [h('h2', { text: 'Letzte 7 Tage' }), week, h('p', { class: 'note', text: 'Balkenhöhe = Aufgaben, grün = davon gleich richtig.' })]),
       h('div', { class: 'card settings' }, [h('h2', { text: 'Einstellungen' }),
         h('label', { class: 'set' }, [h('span', { text: 'Countdown bis' }), goalLab, goal]),
+        h('label', { class: 'set' }, [h('span', { text: 'Schwerpunkt' }), focusSel]),
+        h('p', { class: 'note', text: 'Schwerpunkt: Diese Themen kommen in „Heute üben“ doppelt so oft, Prüfungstraining fragt sie ab. Die anderen werden weiter wiederholt.' }),
         h('label', { class: 'set' }, [font, h('span', { text: 'Schrift OpenDyslexic' })]),
         h('label', { class: 'set' }, [h('span', { text: 'Vorlesen' }), rate]),
         h('p', { class: 'note', text: 'Lernstand und Münzen liegen nur auf diesem Gerät (in diesem Browser).' }),
@@ -181,5 +200,5 @@
     ]), { back: true });
   }
 
-  root.BB.screens = { home: home, lernen: lernen, ueben: ueben, schnell: schnell, werkstatt: werkstatt, streifen: streifen, parent: parent, MODES: MODES };
+  root.BB.screens = { home: home, lernen: lernen, labor: labor, ueben: ueben, schnell: schnell, werkstatt: werkstatt, streifen: streifen, parent: parent, MODES: MODES };
 })(typeof window !== 'undefined' ? window : globalThis);
